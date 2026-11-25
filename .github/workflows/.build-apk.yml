@@ -45,21 +45,18 @@ jobs:
       - name: Generate arena soundtrack and announcer voice lines
         run: |
           mkdir -p assets/audio
-
           python3 - << 'PYEOF'
           import math, os, random, shutil, struct, subprocess, wave
 
           OUT = "assets/audio"
           os.makedirs(OUT, exist_ok=True)
 
-          # 1. Generate driving 132 BPM UT2004-style industrial techno loop (seamless 4 bars)
           def gen_bgm(path):
               sr = 22050
-              bpm = 132.0
-              step_sec = 60.0 / bpm / 4.0
+              step_sec = 60.0 / 132.0 / 4.0
               total_steps = 64
               n_samples = int(total_steps * step_sec * sr)
               buf = [0.0] * n_samples
               rng = random.Random(2004)
-
-              bass_notes = [73.42, 73.42, 87.31,
+              bass = [73.4, 73.4, 87.3, 73.4, 65.4, 65.4, 82.4, 98.0]
+              arp = [293.7, 349.2, 440.0, 34
