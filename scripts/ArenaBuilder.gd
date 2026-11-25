@@ -1,7 +1,7 @@
 extends Node3D
 
 # ==============================================================================
-# UT2004 MOBILE ARENA — DM-DECK17 EDITION (Godot 4.3, GL Compatibility 60 FPS)
+# UT2004 MOBILE ARENA — DM-DECK17 EDITION (Bright Lighting + 60 FPS Mobile Opt)
 # ==============================================================================
 
 const LAYER_WORLD: int = 1
@@ -10,11 +10,6 @@ const LAYER_SHOCK_CORE: int = 4
 
 const TEAM_BLUE: int = 0
 const TEAM_RED: int = 1
-
-const WEP_SHOCK: int = 0
-const WEP_FLAK: int = 1
-const WEP_ROCKET: int = 2
-const WEP_LINK: int = 3
 
 var score_blue: int = 0
 var score_red: int = 0
@@ -52,6 +47,13 @@ func _ready() -> void:
 		remove_child(c)
 		c.queue_free()
 
+	# Force crisp 720p internal viewport scaling -> ~4x faster on high-DPI tablets
+	var root_win = get_tree().root
+	root_win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+	root_win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	root_win.content_scale_size = Vector2i(1280, 720)
+	Engine.max_fps = 60
+
 	randomize()
 	sfx = UTSoundBank.new()
 	add_child(sfx)
@@ -73,33 +75,28 @@ func _load_assets_and_materials() -> void:
 		if loaded is PackedScene:
 			soldier_scene = loaded
 
-	mat_floor = _make_pbr_material("floor", Color(0.55, 0.59, 0.65), 0.52, 0.72, Vector3(0.24, 0.24, 0.24), true)
-	mat_wall = _make_pbr_material("wall", Color(0.42, 0.46, 0.52), 0.58, 0.65, Vector3(0.20, 0.20, 0.20), false)
+	# Balanced metallic/roughness values so steel stays bright and readable without reflection probes
+	mat_floor = _make_pbr_material("floor", Color(0.86, 0.90, 0.95), 0.56, 0.30, Vector3(0.24, 0.24, 0.24), true)
+	mat_wall = _make_pbr_material("wall", Color(0.78, 0.83, 0.90), 0.64, 0.22, Vector3(0.20, 0.20, 0.20), false)
 
 	mat_dark_steel = StandardMaterial3D.new()
-	mat_dark_steel.albedo_color = Color(0.18, 0.20, 0.24)
-	mat_dark_steel.metallic = 0.82
-	mat_dark_steel.roughness = 0.36
-	if mat_wall.normal_texture != null:
-		mat_dark_steel.normal_enabled = true
-		mat_dark_steel.normal_texture = mat_wall.normal_texture
-		mat_dark_steel.uv1_triplanar = true
-		mat_dark_steel.uv1_world_triplanar = true
-		mat_dark_steel.uv1_scale = Vector3(0.35, 0.35, 0.35)
+	mat_dark_steel.albedo_color = Color(0.36, 0.40, 0.46)
+	mat_dark_steel.metallic = 0.35
+	mat_dark_steel.roughness = 0.52
 
 	mat_trim = StandardMaterial3D.new()
 	mat_trim.albedo_texture = _make_hazard_texture()
-	mat_trim.roughness = 0.45
-	mat_trim.metallic = 0.35
+	mat_trim.roughness = 0.50
+	mat_trim.metallic = 0.15
 	mat_trim.uv1_triplanar = true
 	mat_trim.uv1_world_triplanar = true
 	mat_trim.uv1_scale = Vector3(0.5, 0.5, 0.5)
 
-	mat_glow_cyan = _make_glow_material(Color(0.15, 0.88, 1.0), 3.0)
-	mat_glow_orange = _make_glow_material(Color(1.0, 0.55, 0.12), 2.8)
-	mat_glow_purple = _make_glow_material(Color(0.72, 0.22, 1.0), 3.4)
-	mat_glow_green = _make_glow_material(Color(0.15, 1.0, 0.35), 3.0)
-	mat_glow_red = _make_glow_material(Color(1.0, 0.18, 0.14), 3.0)
+	mat_glow_cyan = _make_glow_material(Color(0.20, 0.92, 1.0))
+	mat_glow_orange = _make_glow_material(Color(1.0, 0.68, 0.22))
+	mat_glow_purple = _make_glow_material(Color(0.80, 0.35, 1.0))
+	mat_glow_green = _make_glow_material(Color(0.25, 1.0, 0.42))
+	mat_glow_red = _make_glow_material(Color(1.0, 0.26, 0.20))
 	mat_acid = _make_acid_shader_material()
 
 func _make_pbr_material(prefix: String, tint: Color, rough: float, metal: float, uv_scale: Vector3, is_diamond: bool) -> StandardMaterial3D:
@@ -113,63 +110,46 @@ func _make_pbr_material(prefix: String, tint: Color, rough: float, metal: float,
 
 	var p_col = "res://assets/textures/%s_color.jpg" % prefix
 	var p_nor = "res://assets/textures/%s_normal.jpg" % prefix
-	var p_rgh = "res://assets/textures/%s_roughness.jpg" % prefix
-	var p_met = "res://assets/textures/%s_metalness.jpg" % prefix
 
 	if ResourceLoader.exists(p_col):
 		mat.albedo_texture = ResourceLoader.load(p_col)
-		mat.albedo_color = Color(0.82, 0.85, 0.90)
+		mat.albedo_color = Color(1.0, 1.0, 1.0)
 	else:
 		mat.albedo_texture = _make_procedural_metal_albedo(is_diamond)
 
 	if ResourceLoader.exists(p_nor):
 		mat.normal_enabled = true
 		mat.normal_texture = ResourceLoader.load(p_nor)
-		mat.normal_scale = 1.25
+		mat.normal_scale = 0.95
 	else:
 		mat.normal_enabled = true
 		mat.normal_texture = _make_procedural_metal_normal(is_diamond)
-		mat.normal_scale = 1.1
-
-	if ResourceLoader.exists(p_rgh):
-		mat.roughness_texture = ResourceLoader.load(p_rgh)
-		mat.roughness = 0.85
-
-	if ResourceLoader.exists(p_met):
-		mat.metallic_texture = ResourceLoader.load(p_met)
-		mat.metallic = 0.9
+		mat.normal_scale = 0.90
 
 	return mat
 
-func _make_glow_material(col: Color, energy: float) -> StandardMaterial3D:
+func _make_glow_material(col: Color) -> StandardMaterial3D:
 	var m = StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.albedo_color = col
-	m.emission_enabled = true
-	m.emission = col
-	m.emission_energy_multiplier = energy
-	m.roughness = 0.2
 	return m
 
 func _make_acid_shader_material() -> ShaderMaterial:
 	var sh = Shader.new()
 	sh.code = """
 shader_type spatial;
-render_mode cull_disabled;
+render_mode unshaded, cull_disabled;
 
 void fragment() {
-	vec2 uv = UV * 10.0;
+	vec2 uv = UV * 9.0;
 	float t = TIME * 0.9;
 	float w1 = sin(uv.x * 2.1 + t) * cos(uv.y * 1.9 - t * 0.8);
-	float w2 = sin((uv.x + uv.y) * 3.3 - t * 1.4) * 0.5;
-	float bubble = sin(length(fract(uv * 0.65) - 0.5) * 18.0 - t * 3.0);
-	float v = clamp(0.5 + 0.35 * (w1 + w2) + 0.18 * bubble, 0.0, 1.0);
-	vec3 dark_slime = vec3(0.03, 0.22, 0.05);
-	vec3 bright_slime = vec3(0.42, 1.0, 0.12);
-	vec3 col = mix(dark_slime, bright_slime, smoothstep(0.2, 0.92, v));
-	ALBEDO = col;
-	EMISSION = col * (1.2 + v * 1.6);
-	ROUGHNESS = 0.15;
-	METALLIC = 0.1;
+	float w2 = sin((uv.x + uv.y) * 3.1 - t * 1.3) * 0.5;
+	float bubble = sin(length(fract(uv * 0.65) - 0.5) * 16.0 - t * 2.8);
+	float v = clamp(0.5 + 0.32 * (w1 + w2) + 0.18 * bubble, 0.0, 1.0);
+	vec3 dark_slime = vec3(0.05, 0.38, 0.08);
+	vec3 bright_slime = vec3(0.45, 1.0, 0.20);
+	ALBEDO = mix(dark_slime, bright_slime, smoothstep(0.18, 0.92, v));
 }
 """
 	var sm = ShaderMaterial.new()
@@ -177,13 +157,12 @@ void fragment() {
 	return sm
 
 func _make_hazard_texture() -> ImageTexture:
-	var img = Image.create_empty(128, 128, false, Image.FORMAT_RGBA8)
-	for y in range(128):
-		for x in range(128):
-			var band = int((x + y) / 16) % 2
-			var c = Color(0.95, 0.68, 0.08) if band == 0 else Color(0.09, 0.10, 0.12)
-			var grit = float(((x * 37 + y * 91) % 19) - 9) * 0.006
-			img.set_pixel(x, y, Color(clamp(c.r + grit, 0.0, 1.0), clamp(c.g + grit, 0.0, 1.0), clamp(c.b + grit, 0.0, 1.0), 1.0))
+	var img = Image.create_empty(64, 64, false, Image.FORMAT_RGBA8)
+	for y in range(64):
+		for x in range(64):
+			var band = int((x + y) / 8) % 2
+			var c = Color(0.96, 0.72, 0.12) if band == 0 else Color(0.12, 0.14, 0.16)
+			img.set_pixel(x, y, c)
 	return ImageTexture.create_from_image(img)
 
 func _make_procedural_metal_albedo(is_diamond: bool) -> ImageTexture:
@@ -191,12 +170,12 @@ func _make_procedural_metal_albedo(is_diamond: bool) -> ImageTexture:
 	var img = Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
 	for y in range(size):
 		for x in range(size):
-			var base = 0.34 if is_diamond else 0.28
+			var base = 0.56 if is_diamond else 0.48
 			var edge = (x < 3 or y < 3 or x > size - 4 or y > size - 4)
 			var seam = (x == 64 or y == 64)
 			var val = base
 			if edge or seam:
-				val *= 0.45
+				val *= 0.55
 			elif is_diamond:
 				var dx = (x % 16) - 8
 				var dy = (y % 16) - 8
@@ -205,10 +184,9 @@ func _make_procedural_metal_albedo(is_diamond: bool) -> ImageTexture:
 			else:
 				var rivet = ((x % 32 == 6 or x % 32 == 26) and (y % 32 == 6 or y % 32 == 26))
 				if rivet:
-					val += 0.22
-			var n = float(((x * 17 + y * 53 + x * y) % 23) - 11) * 0.004
-			var c = clamp(val + n, 0.05, 0.95)
-			img.set_pixel(x, y, Color(c * 0.94, c * 0.98, c * 1.06, 1.0))
+					val += 0.18
+			var c = clamp(val, 0.15, 0.95)
+			img.set_pixel(x, y, Color(c * 0.95, c * 0.98, c * 1.04, 1.0))
 	return ImageTexture.create_from_image(img)
 
 func _make_procedural_metal_normal(is_diamond: bool) -> ImageTexture:
@@ -219,19 +197,19 @@ func _make_procedural_metal_normal(is_diamond: bool) -> ImageTexture:
 			var nx = 0.5
 			var ny = 0.5
 			if x < 3 or x == 64:
-				nx = 0.2
+				nx = 0.25
 			elif x > size - 4 or x == 65:
-				nx = 0.8
+				nx = 0.75
 			if y < 3 or y == 64:
-				ny = 0.2
+				ny = 0.25
 			elif y > size - 4 or y == 65:
-				ny = 0.8
+				ny = 0.75
 			if is_diamond:
 				var dx = (x % 16) - 8
 				var dy = (y % 16) - 8
 				if abs(dx) + abs(dy) < 5:
-					nx = clamp(0.5 + float(dx) * 0.08, 0.1, 0.9)
-					ny = clamp(0.5 + float(dy) * 0.08, 0.1, 0.9)
+					nx = clamp(0.5 + float(dx) * 0.08, 0.15, 0.85)
+					ny = clamp(0.5 + float(dy) * 0.08, 0.15, 0.85)
 			img.set_pixel(x, y, Color(nx, ny, 0.96, 1.0))
 	return ImageTexture.create_from_image(img)
 
@@ -239,47 +217,43 @@ func _setup_environment() -> void:
 	var we = WorldEnvironment.new()
 	var env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.03, 0.045, 0.075)
+	env.background_color = Color(0.14, 0.18, 0.25)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.32, 0.38, 0.48)
-	env.ambient_light_energy = 0.85
+	env.ambient_light_color = Color(0.76, 0.82, 0.92)
+	env.ambient_light_energy = 1.45
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.15
-	env.glow_enabled = true
-	env.glow_intensity = 0.65
-	env.glow_bloom = 0.22
+	env.tonemap_exposure = 1.25
+	env.glow_enabled = false
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.05, 0.09, 0.11)
-	env.fog_density = 0.0075
+	env.fog_light_color = Color(0.16, 0.22, 0.28)
+	env.fog_density = 0.0028
 	we.environment = env
 	add_child(we)
 
-	var sun = DirectionalLight3D.new()
-	sun.light_color = Color(0.86, 0.91, 1.0)
-	sun.light_energy = 1.15
-	sun.rotation_degrees = Vector3(-58, 32, 0)
-	sun.shadow_enabled = true
-	add_child(sun)
+	# Key industrial overhead light (no shadow map -> huge mobile FPS boost)
+	var sun_key = DirectionalLight3D.new()
+	sun_key.light_color = Color(1.0, 0.94, 0.84)
+	sun_key.light_energy = 1.25
+	sun_key.rotation_degrees = Vector3(-54, 34, 0)
+	sun_key.shadow_enabled = false
+	add_child(sun_key)
 
-	# Acid pit eerie green uplight
-	_add_point_light(Vector3(0, 0.6, 0), Color(0.28, 1.0, 0.25), 5.0, 22.0)
-	# Warm industrial sodium lamps over upper walkways
-	_add_point_light(Vector3(-17, 9.5, -14), Color(1.0, 0.66, 0.28), 3.6, 26.0)
-	_add_point_light(Vector3(17, 9.5, 14), Color(1.0, 0.66, 0.28), 3.6, 26.0)
-	# Cool team base accent lights
-	_add_point_light(Vector3(0, 6.5, -24), Color(0.25, 0.72, 1.0), 3.2, 22.0)
-	_add_point_light(Vector3(0, 6.5, 24), Color(1.0, 0.28, 0.22), 3.2, 22.0)
-	# Overhead bridge key light
-	_add_point_light(Vector3(0, 9.8, 0), Color(0.75, 0.55, 1.0), 2.8, 18.0)
+	# Cool steel fill light from opposite angle so no wall or corner is pitch black
+	var sun_fill = DirectionalLight3D.new()
+	sun_fill.light_color = Color(0.68, 0.82, 1.0)
+	sun_fill.light_energy = 0.72
+	sun_fill.rotation_degrees = Vector3(-32, -145, 0)
+	sun_fill.shadow_enabled = false
+	add_child(sun_fill)
 
-func _add_point_light(pos: Vector3, col: Color, energy: float, rng: float) -> void:
-	var l = OmniLight3D.new()
-	l.position = pos
-	l.light_color = col
-	l.light_energy = energy
-	l.omni_range = rng
-	l.shadow_enabled = false
-	add_child(l)
+	# Single acid-pit green uplight for signature Deck17 mood
+	var acid_light = OmniLight3D.new()
+	acid_light.position = Vector3(0, 1.2, 0)
+	acid_light.light_color = Color(0.32, 1.0, 0.30)
+	acid_light.light_energy = 3.0
+	acid_light.omni_range = 20.0
+	acid_light.shadow_enabled = false
+	add_child(acid_light)
 
 func _add_box(pos: Vector3, size: Vector3, mat: Material, rot_deg: Vector3 = Vector3.ZERO, has_col: bool = true) -> Node3D:
 	var root: Node3D = null
@@ -308,12 +282,11 @@ func _add_box(pos: Vector3, size: Vector3, mat: Material, rot_deg: Vector3 = Vec
 	return root
 
 func _build_deck17_arena() -> void:
-	# Outer bounds: X in [-24, 24], Z in [-28, 28], Ceiling at Y = 14
 	# Lower floor around central acid vat (Acid vat: X in [-7, 7], Z in [-9, 9])
-	_add_box(Vector3(0, -0.5, -18.5), Vector3(48, 1.0, 19.0), mat_floor) # North lower deck
-	_add_box(Vector3(0, -0.5, 18.5), Vector3(48, 1.0, 19.0), mat_floor)  # South lower deck
-	_add_box(Vector3(-15.5, -0.5, 0), Vector3(17.0, 1.0, 18.0), mat_floor) # West lower deck
-	_add_box(Vector3(15.5, -0.5, 0), Vector3(17.0, 1.0, 18.0), mat_floor)  # East lower deck
+	_add_box(Vector3(0, -0.5, -18.5), Vector3(48, 1.0, 19.0), mat_floor)
+	_add_box(Vector3(0, -0.5, 18.5), Vector3(48, 1.0, 19.0), mat_floor)
+	_add_box(Vector3(-15.5, -0.5, 0), Vector3(17.0, 1.0, 18.0), mat_floor)
+	_add_box(Vector3(15.5, -0.5, 0), Vector3(17.0, 1.0, 18.0), mat_floor)
 
 	# Acid vat basin floor & walls
 	_add_box(Vector3(0, -3.0, 0), Vector3(16.0, 1.0, 20.0), mat_dark_steel)
@@ -343,32 +316,30 @@ func _build_deck17_arena() -> void:
 	_add_box(Vector3(-24.5, 7.0, 0), Vector3(1.0, 15.0, 58.0), mat_wall)
 	_add_box(Vector3(24.5, 7.0, 0), Vector3(1.0, 15.0, 58.0), mat_wall)
 
-	# Ceiling & heavy steel roof trusses + glowing light strips
+	# Ceiling & heavy steel roof trusses + bright industrial light strips
 	_add_box(Vector3(0, 14.5, 0), Vector3(50, 1.0, 58), mat_dark_steel)
 	for z_beam in [-20.0, -10.0, 0.0, 10.0, 20.0]:
 		_add_box(Vector3(0, 13.4, z_beam), Vector3(48, 1.2, 1.2), mat_dark_steel, Vector3.ZERO, false)
-		_add_box(Vector3(0, 12.75, z_beam), Vector3(26, 0.16, 0.35), mat_glow_orange, Vector3.ZERO, false)
+		_add_box(Vector3(0, 12.75, z_beam), Vector3(28, 0.18, 0.42), mat_glow_orange, Vector3.ZERO, false)
 
 	# Glowing Team Base Banners on North (Blue) & South (Red) walls
-	_add_box(Vector3(0, 9.2, -27.85), Vector3(16.0, 0.45, 0.25), mat_glow_cyan, Vector3.ZERO, false)
-	_add_box(Vector3(0, 9.2, 27.85), Vector3(16.0, 0.45, 0.25), mat_glow_red, Vector3.ZERO, false)
+	_add_box(Vector3(0, 9.2, -27.85), Vector3(18.0, 0.55, 0.25), mat_glow_cyan, Vector3.ZERO, false)
+	_add_box(Vector3(0, 9.2, 27.85), Vector3(18.0, 0.55, 0.25), mat_glow_red, Vector3.ZERO, false)
 
 	# Upper Deck Catwalks (Y = 4.4)
-	_add_box(Vector3(0, 4.15, -23.5), Vector3(48, 0.5, 9.0), mat_floor) # North balcony
-	_add_box(Vector3(0, 4.15, 23.5), Vector3(48, 0.5, 9.0), mat_floor)  # South balcony
-	_add_box(Vector3(-20.0, 4.15, 0), Vector3(8.0, 0.5, 38.0), mat_floor) # West balcony
-	_add_box(Vector3(20.0, 4.15, 0), Vector3(8.0, 0.5, 38.0), mat_floor)  # East balcony
+	_add_box(Vector3(0, 4.15, -23.5), Vector3(48, 0.5, 9.0), mat_floor)
+	_add_box(Vector3(0, 4.15, 23.5), Vector3(48, 0.5, 9.0), mat_floor)
+	_add_box(Vector3(-20.0, 4.15, 0), Vector3(8.0, 0.5, 38.0), mat_floor)
+	_add_box(Vector3(20.0, 4.15, 0), Vector3(8.0, 0.5, 38.0), mat_floor)
 
-	# Central High Bridge across the acid vat (Classic Deck17 bridge!)
+	# Central High Bridge across the acid vat
 	_add_box(Vector3(0, 4.15, 0), Vector3(32.0, 0.48, 4.6), mat_floor)
-	_add_box(Vector3(0, 4.42, -2.2), Vector3(30.0, 0.12, 0.22), mat_glow_purple, Vector3.ZERO, false)
-	_add_box(Vector3(0, 4.42, 2.2), Vector3(30.0, 0.12, 0.22), mat_glow_purple, Vector3.ZERO, false)
+	_add_box(Vector3(0, 4.42, -2.2), Vector3(30.0, 0.14, 0.24), mat_glow_purple, Vector3.ZERO, false)
+	_add_box(Vector3(0, 4.42, 2.2), Vector3(30.0, 0.14, 0.24), mat_glow_purple, Vector3.ZERO, false)
 
-	# Wide gentle ramps from Lower Floor (Y=0) up to Upper Deck (Y=4.4)
-	# Ramp length = 12.5m, rise = 4.4m -> angle ~20.6 deg (super smooth!)
+	# Wide gentle ramps from Lower Floor up to Upper Deck
 	_add_box(Vector3(-12.5, 2.05, -13.0), Vector3(4.6, 0.45, 12.8), mat_floor, Vector3(20.5, 0, 0))
 	_add_box(Vector3(12.5, 2.05, 13.0), Vector3(4.6, 0.45, 12.8), mat_floor, Vector3(-20.5, 0, 0))
-	# Hazard side rails on ramps
 	_add_box(Vector3(-14.7, 2.35, -13.0), Vector3(0.25, 0.4, 12.8), mat_trim, Vector3(20.5, 0, 0), false)
 	_add_box(Vector3(14.7, 2.35, 13.0), Vector3(0.25, 0.4, 12.8), mat_trim, Vector3(-20.5, 0, 0), false)
 
@@ -381,10 +352,10 @@ func _build_deck17_arena() -> void:
 	]
 	for p in pillar_coords:
 		_add_box(p, Vector3(2.4, 14.0, 2.4), mat_wall)
-		_add_box(Vector3(p.x, 2.2, p.z), Vector3(2.65, 0.35, 2.65), mat_trim, Vector3.ZERO, false)
-		_add_box(Vector3(p.x, 7.6, p.z), Vector3(2.6, 0.25, 2.6), mat_glow_orange, Vector3.ZERO, false)
+		_add_box(Vector3(p.x, 2.2, p.z), Vector3(2.65, 0.38, 2.65), mat_trim, Vector3.ZERO, false)
+		_add_box(Vector3(p.x, 7.6, p.z), Vector3(2.6, 0.28, 2.6), mat_glow_orange, Vector3.ZERO, false)
 
-	# Tactical steel cover bunkers on lower & upper decks
+	# Tactical steel cover bunkers
 	_add_box(Vector3(0, 1.1, -15.0), Vector3(5.0, 2.2, 1.4), mat_dark_steel)
 	_add_box(Vector3(0, 1.1, 15.0), Vector3(5.0, 2.2, 1.4), mat_dark_steel)
 	_add_box(Vector3(-13.5, 1.0, 5.5), Vector3(2.6, 2.0, 2.6), mat_dark_steel)
@@ -392,7 +363,7 @@ func _build_deck17_arena() -> void:
 	_add_box(Vector3(-19.0, 5.4, -10.0), Vector3(1.2, 2.0, 3.8), mat_dark_steel)
 	_add_box(Vector3(19.0, 5.4, 10.0), Vector3(1.2, 2.0, 3.8), mat_dark_steel)
 
-	# Glowing Jump Pads (Lower floor corners -> Upper Deck!)
+	# Glowing Jump Pads
 	_add_jump_pad(Vector3(13.5, 0.08, -14.5), Vector3(19.0, 6.2, -16.0))
 	_add_jump_pad(Vector3(-13.5, 0.08, 14.5), Vector3(-19.0, 6.2, 16.0))
 
@@ -406,6 +377,7 @@ func _add_jump_pad(pos: Vector3, target_pos: Vector3) -> void:
 	cm.top_radius = 1.5
 	cm.bottom_radius = 1.75
 	cm.height = 0.22
+	cm.radial_segments = 16
 	base.mesh = cm
 	base.material_override = mat_dark_steel
 	pad.add_child(base)
@@ -414,6 +386,8 @@ func _add_jump_pad(pos: Vector3, target_pos: Vector3) -> void:
 	var tm = TorusMesh.new()
 	tm.inner_radius = 0.95
 	tm.outer_radius = 1.35
+	tm.rings = 16
+	tm.ring_segments = 10
 	ring.mesh = tm
 	ring.material_override = mat_glow_cyan
 	ring.position = Vector3(0, 0.14, 0)
@@ -424,6 +398,7 @@ func _add_jump_pad(pos: Vector3, target_pos: Vector3) -> void:
 	c2.top_radius = 0.75
 	c2.bottom_radius = 0.75
 	c2.height = 0.08
+	c2.radial_segments = 16
 	core.mesh = c2
 	core.material_override = mat_glow_cyan
 	core.position = Vector3(0, 0.12, 0)
@@ -449,7 +424,6 @@ func _setup_spawns_and_pickups() -> void:
 		Vector3(19.5, 4.7, 14.0)
 	]
 
-	# Pickups: health, armor, U-Damage
 	_add_pickup(Vector3(0.0, 4.7, 0.0), "udamage", mat_glow_purple, 28.0)
 	_add_pickup(Vector3(-19.5, 4.7, 0.0), "armor", mat_glow_orange, 18.0)
 	_add_pickup(Vector3(19.5, 4.7, 0.0), "armor", mat_glow_orange, 18.0)
@@ -468,6 +442,7 @@ func _add_pickup(pos: Vector3, kind: String, mat: Material, respawn_sec: float) 
 	bm.top_radius = 0.65
 	bm.bottom_radius = 0.75
 	bm.height = 0.12
+	bm.radial_segments = 14
 	holo_base.mesh = bm
 	holo_base.material_override = mat_dark_steel
 	root.add_child(holo_base)
@@ -499,6 +474,8 @@ func _add_pickup(pos: Vector3, kind: String, mat: Material, respawn_sec: float) 
 		var tm = TorusMesh.new()
 		tm.inner_radius = 0.25
 		tm.outer_radius = 0.55
+		tm.rings = 14
+		tm.ring_segments = 10
 		m.mesh = tm
 		m.material_override = mat
 		m.rotation_degrees = Vector3(90, 0, 0)
@@ -551,13 +528,12 @@ func _process(delta: float) -> void:
 		if hud != null:
 			hud.show_banner("NEW MATCH — FIGHT!", Color(0.25, 0.9, 1.0))
 
-	# Animate jump pads
+	var ticks = Time.get_ticks_msec() * 0.004
 	for jp in jump_pads:
 		var r: Node3D = jp["ring"]
 		r.rotation.y += delta * 2.4
-		r.position.y = 0.15 + sin(Time.get_ticks_msec() * 0.006) * 0.05
+		r.position.y = 0.15 + sin(ticks * 1.5) * 0.05
 
-	# Animate and check pickups
 	for p in pickups:
 		var item: Node3D = p["node"]
 		if not p["active"]:
@@ -567,16 +543,14 @@ func _process(delta: float) -> void:
 				item.visible = true
 		else:
 			item.rotation.y += delta * 2.6
-			item.position.y = 0.88 + sin(Time.get_ticks_msec() * 0.004 + p["pos"].x) * 0.14
+			item.position.y = 0.88 + sin(ticks + p["pos"].x) * 0.14
 			_check_pickup_collect(p)
 
-	# Acid vat damage check
 	acid_damage_timer -= delta
 	if acid_damage_timer <= 0.0:
 		acid_damage_timer = 0.35
 		_check_acid_damage()
 
-	# Update projectiles
 	var keep_proj: Array = []
 	for pr in projectiles:
 		if is_instance_valid(pr):
@@ -586,7 +560,6 @@ func _process(delta: float) -> void:
 				pr.queue_free()
 	projectiles = keep_proj
 
-	# Update shock cores
 	var keep_cores: Array = []
 	for sc in shock_cores:
 		if is_instance_valid(sc):
@@ -596,7 +569,6 @@ func _process(delta: float) -> void:
 				sc.queue_free()
 	shock_cores = keep_cores
 
-	# Update VFX
 	var keep_fx: Array = []
 	for fx in effects:
 		if is_instance_valid(fx):
@@ -684,7 +656,7 @@ func spawn_beam(from_pos: Vector3, to_pos: Vector3, col: Color, radius: float, l
 
 func spawn_explosion(pos: Vector3, radius: float, col: Color, damage: int, attacker, weapon_name: String, knockback: float) -> void:
 	var fx = UTExplosionFX.new()
-	fx.setup(pos, radius, col, 0.38)
+	fx.setup(pos, radius, col, 0.34)
 	add_child(fx)
 	effects.append(fx)
 	sfx.play_sfx("shock_combo" if weapon_name == "Shock Combo" else "explosion")
@@ -707,7 +679,6 @@ func spawn_explosion(pos: Vector3, radius: float, col: Color, damage: int, attac
 			impulse.y = max(impulse.y, 4.5 * falloff)
 			var dmg = int(round(float(damage) * falloff))
 			if a == attacker:
-				# Reduced self-damage so Rocket Jumping feels awesome!
 				dmg = int(round(float(dmg) * 0.25))
 				impulse *= 1.35
 			elif attacker != null and a.team == attacker.team:
@@ -729,7 +700,7 @@ func spawn_shock_core(pos: Vector3, vel: Vector3, attacker) -> void:
 	shock_cores.append(sc)
 
 # ==============================================================================
-# PROCEDURAL 16-BIT WAV SOUND SYNTHESIZER (Zero external audio files needed)
+# PROCEDURAL 16-BIT WAV SOUND SYNTHESIZER
 # ==============================================================================
 class UTSoundBank extends Node:
 	var bank: Dictionary = {}
@@ -737,25 +708,25 @@ class UTSoundBank extends Node:
 	var next_idx: int = 0
 
 	func _ready() -> void:
-		for i in range(8):
+		for i in range(6):
 			var p = AudioStreamPlayer.new()
 			p.volume_db = -8.0
 			add_child(p)
 			players.append(p)
 
 		bank["shock_fire"] = _gen_tone(0.18, 920.0, 210.0, 0.25, 0.8)
-		bank["shock_combo"] = _gen_tone(0.45, 360.0, 42.0, 0.65, 1.0)
-		bank["flak_fire"] = _gen_tone(0.20, 220.0, 65.0, 0.85, 0.9)
-		bank["rocket_fire"] = _gen_tone(0.26, 170.0, 55.0, 0.72, 0.85)
-		bank["link_fire"] = _gen_tone(0.09, 680.0, 420.0, 0.15, 0.55)
-		bank["explosion"] = _gen_tone(0.38, 120.0, 32.0, 0.92, 0.95)
-		bank["hit"] = _gen_tone(0.055, 1480.0, 1180.0, 0.05, 0.65)
-		bank["jump_pad"] = _gen_tone(0.28, 240.0, 980.0, 0.1, 0.75)
-		bank["dodge"] = _gen_tone(0.13, 300.0, 140.0, 0.4, 0.55)
-		bank["pickup"] = _gen_tone(0.22, 520.0, 1040.0, 0.0, 0.65)
+		bank["shock_combo"] = _gen_tone(0.42, 360.0, 42.0, 0.65, 1.0)
+		bank["flak_fire"] = _gen_tone(0.19, 220.0, 65.0, 0.85, 0.9)
+		bank["rocket_fire"] = _gen_tone(0.24, 170.0, 55.0, 0.72, 0.85)
+		bank["link_fire"] = _gen_tone(0.08, 680.0, 420.0, 0.15, 0.55)
+		bank["explosion"] = _gen_tone(0.34, 120.0, 32.0, 0.92, 0.95)
+		bank["hit"] = _gen_tone(0.05, 1480.0, 1180.0, 0.05, 0.65)
+		bank["jump_pad"] = _gen_tone(0.25, 240.0, 980.0, 0.1, 0.75)
+		bank["dodge"] = _gen_tone(0.12, 300.0, 140.0, 0.4, 0.55)
+		bank["pickup"] = _gen_tone(0.20, 520.0, 1040.0, 0.0, 0.65)
 
 	func _gen_tone(dur: float, f0: float, f1: float, noise_mix: float, amp: float) -> AudioStreamWAV:
-		var rate = 22050
+		var rate = 16000
 		var count = int(dur * rate)
 		var data = PackedByteArray()
 		data.resize(count * 2)
@@ -789,7 +760,7 @@ class UTSoundBank extends Node:
 		p.play()
 
 # ==============================================================================
-# PLAYER CONTROLLER (UT2004 Physics + Multi-Part 3D Weapons)
+# PLAYER CONTROLLER (Fixed Touch Firing + UT2004 Movement)
 # ==============================================================================
 class UTPlayer extends CharacterBody3D:
 	var arena: Node3D = null
@@ -805,7 +776,8 @@ class UTPlayer extends CharacterBody3D:
 	var cam: Camera3D = null
 	var weapon_pivot: Node3D = null
 	var weapon_models: Array = []
-	var muzzle_light: OmniLight3D = null
+	var muzzle_flash: MeshInstance3D = null
+	var muzzle_mat: StandardMaterial3D = null
 	var muzzle_timer: float = 0.0
 
 	var current_weapon: int = 0
@@ -819,7 +791,6 @@ class UTPlayer extends CharacterBody3D:
 	var multi_kill: int = 0
 	var multi_kill_timer: float = 0.0
 
-	# Touch + Keyboard input state
 	var touch_move: Vector2 = Vector2.ZERO
 	var touch_fire: bool = false
 	var touch_alt: bool = false
@@ -841,7 +812,7 @@ class UTPlayer extends CharacterBody3D:
 		cam = Camera3D.new()
 		cam.position = Vector3(0, 1.56, 0)
 		cam.fov = 88.0
-		cam.far = 140.0
+		cam.far = 120.0
 		add_child(cam)
 		cam.current = true
 
@@ -849,58 +820,78 @@ class UTPlayer extends CharacterBody3D:
 		weapon_pivot.position = Vector3(0.28, -0.26, -0.52)
 		cam.add_child(weapon_pivot)
 
-		muzzle_light = OmniLight3D.new()
-		muzzle_light.position = Vector3(0, 0.05, -0.65)
-		muzzle_light.omni_range = 7.5
-		muzzle_light.light_energy = 0.0
-		weapon_pivot.add_child(muzzle_light)
+		# Lightweight unshaded muzzle flash instead of dynamic OmniLight3D
+		muzzle_flash = MeshInstance3D.new()
+		var fm = SphereMesh.new()
+		fm.radius = 0.12
+		fm.height = 0.24
+		fm.radial_segments = 8
+		fm.rings = 6
+		muzzle_flash.mesh = fm
+		muzzle_mat = StandardMaterial3D.new()
+		muzzle_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		muzzle_mat.albedo_color = Color(1.0, 0.8, 0.3)
+		muzzle_flash.material_override = muzzle_mat
+		muzzle_flash.position = Vector3(0, 0.02, -0.58)
+		muzzle_flash.visible = false
+		weapon_pivot.add_child(muzzle_flash)
 
 		_build_all_viewmodels()
 		select_weapon(0)
 
 	func _build_all_viewmodels() -> void:
 		weapon_models.clear()
+		var gun_metal = StandardMaterial3D.new()
+		gun_metal.albedo_color = Color(0.32, 0.36, 0.42)
+		gun_metal.metallic = 0.35
+		gun_metal.roughness = 0.45
+
+		var gun_silver = StandardMaterial3D.new()
+		gun_silver.albedo_color = Color(0.68, 0.72, 0.78)
+		gun_silver.metallic = 0.30
+		gun_silver.roughness = 0.40
+
 		# 0: Shock Rifle
 		var w0 = Node3D.new()
-		_vm_part(w0, Vector3(0, 0, -0.05), Vector3(0.11, 0.14, 0.72), arena.mat_dark_steel)
+		_vm_part(w0, Vector3(0, 0, -0.05), Vector3(0.11, 0.13, 0.72), gun_metal)
 		_vm_part(w0, Vector3(0, 0.04, -0.22), Vector3(0.06, 0.05, 0.46), arena.mat_glow_purple)
-		_vm_part(w0, Vector3(0, 0.09, -0.02), Vector3(0.04, 0.06, 0.22), arena.mat_wall)
-		_vm_part(w0, Vector3(0, -0.06, -0.36), Vector3(0.08, 0.04, 0.24), arena.mat_wall)
+		_vm_part(w0, Vector3(0, 0.09, -0.02), Vector3(0.04, 0.06, 0.22), gun_silver)
+		_vm_part(w0, Vector3(0, -0.06, -0.36), Vector3(0.08, 0.04, 0.24), gun_silver)
 		weapon_pivot.add_child(w0)
 		weapon_models.append(w0)
 
 		# 1: Flak Cannon
 		var w1 = Node3D.new()
 		var flk_yellow = StandardMaterial3D.new()
-		flk_yellow.albedo_color = Color(0.92, 0.68, 0.10)
-		flk_yellow.metallic = 0.65
-		flk_yellow.roughness = 0.35
-		_vm_part(w1, Vector3(0, -0.02, 0.0), Vector3(0.22, 0.18, 0.56), flk_yellow)
-		_vm_part(w1, Vector3(-0.08, 0.02, -0.32), Vector3(0.06, 0.13, 0.26), arena.mat_dark_steel)
-		_vm_part(w1, Vector3(0.08, 0.02, -0.32), Vector3(0.06, 0.13, 0.26), arena.mat_dark_steel)
-		_vm_part(w1, Vector3(0, 0.01, -0.24), Vector3(0.08, 0.08, 0.18), arena.mat_glow_orange)
+		flk_yellow.albedo_color = Color(0.95, 0.72, 0.14)
+		flk_yellow.metallic = 0.25
+		flk_yellow.roughness = 0.42
+		_vm_part(w1, Vector3(0, -0.02, 0.0), Vector3(0.20, 0.16, 0.54), flk_yellow)
+		_vm_part(w1, Vector3(-0.08, 0.02, -0.30), Vector3(0.055, 0.12, 0.26), gun_metal)
+		_vm_part(w1, Vector3(0.08, 0.02, -0.30), Vector3(0.055, 0.12, 0.26), gun_metal)
+		_vm_part(w1, Vector3(0, 0.01, -0.24), Vector3(0.08, 0.07, 0.18), arena.mat_glow_orange)
 		weapon_pivot.add_child(w1)
 		weapon_models.append(w1)
 
 		# 2: Rocket Launcher
 		var w2 = Node3D.new()
 		var rkt_red = StandardMaterial3D.new()
-		rkt_red.albedo_color = Color(0.55, 0.16, 0.14)
-		rkt_red.metallic = 0.72
-		rkt_red.roughness = 0.38
-		_vm_part(w2, Vector3(0, 0.0, 0.02), Vector3(0.24, 0.24, 0.52), rkt_red)
-		_vm_cyl(w2, Vector3(-0.055, 0.04, -0.30), 0.042, 0.42, arena.mat_dark_steel)
-		_vm_cyl(w2, Vector3(0.055, 0.04, -0.30), 0.042, 0.42, arena.mat_dark_steel)
-		_vm_cyl(w2, Vector3(0.0, -0.05, -0.30), 0.042, 0.42, arena.mat_dark_steel)
-		_vm_part(w2, Vector3(0.0, 0.14, -0.10), Vector3(0.05, 0.04, 0.18), arena.mat_glow_red)
+		rkt_red.albedo_color = Color(0.72, 0.22, 0.18)
+		rkt_red.metallic = 0.28
+		rkt_red.roughness = 0.45
+		_vm_part(w2, Vector3(0, 0.0, 0.02), Vector3(0.22, 0.22, 0.50), rkt_red)
+		_vm_cyl(w2, Vector3(-0.055, 0.04, -0.28), 0.042, 0.40, gun_metal)
+		_vm_cyl(w2, Vector3(0.055, 0.04, -0.28), 0.042, 0.40, gun_metal)
+		_vm_cyl(w2, Vector3(0.0, -0.05, -0.28), 0.042, 0.40, gun_metal)
+		_vm_part(w2, Vector3(0.0, 0.13, -0.08), Vector3(0.05, 0.04, 0.18), arena.mat_glow_red)
 		weapon_pivot.add_child(w2)
 		weapon_models.append(w2)
 
 		# 3: Link Gun
 		var w3 = Node3D.new()
-		_vm_part(w3, Vector3(0, 0, -0.04), Vector3(0.14, 0.14, 0.62), arena.mat_dark_steel)
-		_vm_part(w3, Vector3(-0.06, 0.02, -0.34), Vector3(0.03, 0.06, 0.30), arena.mat_glow_green)
-		_vm_part(w3, Vector3(0.06, 0.02, -0.34), Vector3(0.03, 0.06, 0.30), arena.mat_glow_green)
+		_vm_part(w3, Vector3(0, 0, -0.04), Vector3(0.14, 0.13, 0.60), gun_metal)
+		_vm_part(w3, Vector3(-0.06, 0.02, -0.32), Vector3(0.03, 0.06, 0.28), arena.mat_glow_green)
+		_vm_part(w3, Vector3(0.06, 0.02, -0.32), Vector3(0.03, 0.06, 0.28), arena.mat_glow_green)
 		_vm_part(w3, Vector3(0, 0.08, -0.08), Vector3(0.08, 0.04, 0.24), arena.mat_glow_green)
 		weapon_pivot.add_child(w3)
 		weapon_models.append(w3)
@@ -920,6 +911,7 @@ class UTPlayer extends CharacterBody3D:
 		cm.top_radius = rad
 		cm.bottom_radius = rad
 		cm.height = h
+		cm.radial_segments = 10
 		mi.mesh = cm
 		mi.material_override = mat
 		mi.position = pos
@@ -930,7 +922,7 @@ class UTPlayer extends CharacterBody3D:
 		current_weapon = clamp(idx, 0, 3)
 		for i in range(weapon_models.size()):
 			weapon_models[i].visible = (i == current_weapon)
-		recoil_z = 0.16
+		recoil_z = 0.15
 
 	func respawn() -> void:
 		alive = true
@@ -1041,13 +1033,11 @@ class UTPlayer extends CharacterBody3D:
 			if multi_kill_timer <= 0.0:
 				multi_kill = 0
 
-		# Gravity
 		if not is_on_floor():
 			velocity.y -= 23.0 * delta
 		else:
 			jumps_used = 0
 
-		# Arena movement
 		var wish = _get_move_input_world()
 		var max_spd = 11.4
 		var accel = 13.0 if is_on_floor() else 3.2
@@ -1056,7 +1046,6 @@ class UTPlayer extends CharacterBody3D:
 		var hspd = Vector2(velocity.x, velocity.z).length()
 		if is_on_floor() or wish.length() > 0.05:
 			if is_on_floor() and hspd > max_spd + 1.0:
-				# Preserve dodge momentum smoothly
 				velocity.x = lerp(velocity.x, target_vx, delta * 5.0)
 				velocity.z = lerp(velocity.z, target_vz, delta * 5.0)
 			else:
@@ -1066,16 +1055,16 @@ class UTPlayer extends CharacterBody3D:
 		move_and_slide()
 		arena.check_jump_pads(self)
 
-		# Firing (Touch OR Mouse)
-		var want_fire = touch_fire or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-		var want_alt = touch_alt or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+		# FIX: Mouse firing ONLY works when mouse is captured on desktop, never from Android touch emulation!
+		var mouse_captured = (Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED)
+		var want_fire = touch_fire or (mouse_captured and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+		var want_alt = touch_alt or (mouse_captured and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT))
 		if fire_cd <= 0.0:
 			if want_fire:
 				_fire_weapon(false)
 			elif want_alt:
 				_fire_weapon(true)
 
-		# Weapon bob + recoil + strafe roll
 		var move_ratio = clamp(Vector2(velocity.x, velocity.z).length() / max_spd, 0.0, 1.2)
 		if is_on_floor() and move_ratio > 0.1:
 			bob_t += delta * 11.5 * move_ratio
@@ -1090,9 +1079,9 @@ class UTPlayer extends CharacterBody3D:
 
 		if muzzle_timer > 0.0:
 			muzzle_timer -= delta
-			muzzle_light.light_energy = max(0.0, muzzle_timer * 55.0)
+			muzzle_flash.visible = true
 		else:
-			muzzle_light.light_energy = 0.0
+			muzzle_flash.visible = false
 
 	func _fire_weapon(is_alt: bool) -> void:
 		var mult = 2.0 if udamage_timer > 0.0 else 1.0
@@ -1101,11 +1090,10 @@ class UTPlayer extends CharacterBody3D:
 		var muzzle_pos = weapon_pivot.global_position + cam_dir * 0.45
 
 		if current_weapon == 0:
-			# SHOCK RIFLE
 			if not is_alt:
 				fire_cd = 0.52
 				recoil_z = 0.12
-				_flash_muzzle(Color(0.75, 0.25, 1.0))
+				_flash_muzzle(Color(0.82, 0.35, 1.0))
 				arena.sfx.play_sfx("shock_fire")
 				var hit = _raycast(cam_pos, cam_pos + cam_dir * 110.0, 1 | 2 | 4, true)
 				var end_p = cam_pos + cam_dir * 110.0
@@ -1118,20 +1106,19 @@ class UTPlayer extends CharacterBody3D:
 						col_obj.apply_damage(int(45 * mult), self, "Shock Rifle", cam_dir * 7.5)
 						if arena.hud != null:
 							arena.hud.trigger_hitmarker()
-				arena.spawn_beam(muzzle_pos, end_p, Color(0.78, 0.28, 1.0), 0.065, 0.16)
+				arena.spawn_beam(muzzle_pos, end_p, Color(0.82, 0.35, 1.0), 0.065, 0.16)
 			else:
 				fire_cd = 0.56
 				recoil_z = 0.10
-				_flash_muzzle(Color(0.65, 0.22, 1.0))
+				_flash_muzzle(Color(0.75, 0.28, 1.0))
 				arena.sfx.play_sfx("shock_fire")
 				arena.spawn_shock_core(muzzle_pos + cam_dir * 0.4, cam_dir * 14.5, self)
 
 		elif current_weapon == 1:
-			# FLAK CANNON
 			if not is_alt:
 				fire_cd = 0.68
 				recoil_z = 0.17
-				_flash_muzzle(Color(1.0, 0.65, 0.15))
+				_flash_muzzle(Color(1.0, 0.72, 0.18))
 				arena.sfx.play_sfx("flak_fire")
 				for i in range(8):
 					var spread = Vector3(randf_range(-0.09, 0.09), randf_range(-0.07, 0.07), randf_range(-0.09, 0.09))
@@ -1140,40 +1127,38 @@ class UTPlayer extends CharacterBody3D:
 			else:
 				fire_cd = 0.82
 				recoil_z = 0.19
-				_flash_muzzle(Color(1.0, 0.55, 0.1))
+				_flash_muzzle(Color(1.0, 0.60, 0.12))
 				arena.sfx.play_sfx("flak_fire")
 				var launch = (cam_dir + Vector3(0, 0.18, 0)).normalized() * 29.0
 				arena.spawn_projectile(muzzle_pos, launch, "flak_shell", self, int(85 * mult), 5.2, 0)
 
 		elif current_weapon == 2:
-			# ROCKET LAUNCHER
 			if not is_alt:
 				fire_cd = 0.78
 				recoil_z = 0.20
-				_flash_muzzle(Color(1.0, 0.35, 0.12))
+				_flash_muzzle(Color(1.0, 0.42, 0.14))
 				arena.sfx.play_sfx("rocket_fire")
 				arena.spawn_projectile(muzzle_pos + cam_dir * 0.35, cam_dir * 34.0, "rocket", self, int(92 * mult), 5.6, 0)
 			else:
 				fire_cd = 1.25
 				recoil_z = 0.24
-				_flash_muzzle(Color(1.0, 0.28, 0.08))
+				_flash_muzzle(Color(1.0, 0.32, 0.10))
 				arena.sfx.play_sfx("rocket_fire")
 				for ang in [-0.08, 0.0, 0.08]:
 					var rdir = cam_dir.rotated(Vector3.UP, ang)
 					arena.spawn_projectile(muzzle_pos + rdir * 0.4, rdir * 32.0, "rocket", self, int(68 * mult), 4.8, 0)
 
 		elif current_weapon == 3:
-			# LINK GUN
 			if not is_alt:
 				fire_cd = 0.115
 				recoil_z = 0.045
-				_flash_muzzle(Color(0.2, 1.0, 0.35))
+				_flash_muzzle(Color(0.25, 1.0, 0.40))
 				arena.sfx.play_sfx("link_fire")
 				arena.spawn_projectile(muzzle_pos, cam_dir * 52.0, "plasma", self, int(22 * mult), 0.0, 0)
 			else:
 				fire_cd = 0.09
 				recoil_z = 0.025
-				_flash_muzzle(Color(0.2, 1.0, 0.4))
+				_flash_muzzle(Color(0.25, 1.0, 0.45))
 				arena.sfx.play_sfx("link_fire")
 				var hit2 = _raycast(cam_pos, cam_pos + cam_dir * 26.0, 1 | 2, false)
 				var end2 = cam_pos + cam_dir * 26.0
@@ -1184,11 +1169,11 @@ class UTPlayer extends CharacterBody3D:
 						co.apply_damage(int(18 * mult), self, "Link Beam", cam_dir * 2.5)
 						if arena.hud != null:
 							arena.hud.trigger_hitmarker()
-				arena.spawn_beam(muzzle_pos, end2, Color(0.22, 1.0, 0.38), 0.05, 0.10)
+				arena.spawn_beam(muzzle_pos, end2, Color(0.25, 1.0, 0.42), 0.05, 0.10)
 
 	func _flash_muzzle(col: Color) -> void:
-		muzzle_light.light_color = col
-		muzzle_timer = 0.08
+		muzzle_mat.albedo_color = col
+		muzzle_timer = 0.055
 
 	func _raycast(from_pos: Vector3, to_pos: Vector3, mask: int, check_areas: bool) -> Dictionary:
 		var space = get_world_3d().direct_space_state
@@ -1205,7 +1190,7 @@ class UTPlayer extends CharacterBody3D:
 		armor -= absorb
 		hp -= (dmg - absorb)
 		if arena.hud != null:
-			arena.hud.flash_screen(Color(1.0, 0.12, 0.08, 0.38))
+			arena.hud.flash_screen(Color(1.0, 0.12, 0.08, 0.35))
 		if hp <= 0:
 			hp = 0
 			alive = false
@@ -1237,7 +1222,7 @@ class UTPlayer extends CharacterBody3D:
 			arena.hud.show_banner("UNSTOPPABLE!", Color(1.0, 0.85, 0.15))
 
 # ==============================================================================
-# ANIMATED 3D SOLDIER BOT (Mixamo Soldier.glb + Skeletal Animations + AI)
+# ANIMATED 3D SOLDIER BOT
 # ==============================================================================
 class UTBot extends CharacterBody3D:
 	var arena: Node3D = null
@@ -1283,11 +1268,11 @@ class UTBot extends CharacterBody3D:
 
 	func _build_visual() -> void:
 		var glow_mat = arena.mat_glow_red if team == 1 else arena.mat_glow_cyan
-		var tint = Color(1.0, 0.74, 0.74) if team == 1 else Color(0.74, 0.88, 1.0)
+		var tint = Color(1.0, 0.65, 0.65) if team == 1 else Color(0.68, 0.86, 1.0)
 
 		if arena.soldier_scene != null:
 			var model = arena.soldier_scene.instantiate()
-			model.scale = Vector3(1.06, 1.06, 1.06)
+			model.scale = Vector3(1.08, 1.08, 1.08)
 			visual_root.add_child(model)
 			_tint_meshes(model, tint)
 			anim_player = _find_anim_player(model)
@@ -1309,11 +1294,10 @@ class UTBot extends CharacterBody3D:
 				if anim_idle == "":
 					anim_idle = anim_run
 		else:
-			# Fallback multi-part articulated cyber-soldier (never a capsule!)
 			var body_mat = StandardMaterial3D.new()
-			body_mat.albedo_color = Color(0.32, 0.14, 0.14) if team == 1 else Color(0.14, 0.22, 0.36)
-			body_mat.metallic = 0.75
-			body_mat.roughness = 0.32
+			body_mat.albedo_color = Color(0.65, 0.22, 0.20) if team == 1 else Color(0.22, 0.45, 0.72)
+			body_mat.metallic = 0.30
+			body_mat.roughness = 0.45
 			_part(visual_root, Vector3(0, 1.15, 0), Vector3(0.56, 0.68, 0.34), body_mat)
 			_part(visual_root, Vector3(0, 1.66, 0), Vector3(0.32, 0.34, 0.34), body_mat)
 			_part(visual_root, Vector3(-0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), body_mat)
@@ -1321,10 +1305,10 @@ class UTBot extends CharacterBody3D:
 			_part(visual_root, Vector3(-0.38, 1.15, 0), Vector3(0.18, 0.68, 0.20), body_mat)
 			_part(visual_root, Vector3(0.38, 1.15, -0.15), Vector3(0.18, 0.62, 0.20), body_mat)
 
-		# UT2004 glowing team shoulder/chest beacons + 3D sci-fi rifle
-		_part(visual_root, Vector3(0, 1.68, -0.17), Vector3(0.24, 0.08, 0.06), glow_mat)
-		_part(visual_root, Vector3(-0.34, 1.44, 0.0), Vector3(0.12, 0.08, 0.18), glow_mat)
-		_part(visual_root, Vector3(0.34, 1.44, 0.0), Vector3(0.12, 0.08, 0.18), glow_mat)
+		# High-visibility UT2004 glowing visor, shoulder pads & sci-fi rifle
+		_part(visual_root, Vector3(0, 1.68, -0.18), Vector3(0.26, 0.09, 0.06), glow_mat)
+		_part(visual_root, Vector3(-0.34, 1.44, 0.0), Vector3(0.14, 0.09, 0.20), glow_mat)
+		_part(visual_root, Vector3(0.34, 1.44, 0.0), Vector3(0.14, 0.09, 0.20), glow_mat)
 		_part(visual_root, Vector3(0.24, 1.20, -0.45), Vector3(0.10, 0.12, 0.65), arena.mat_dark_steel)
 		_part(visual_root, Vector3(0.24, 1.24, -0.58), Vector3(0.05, 0.04, 0.32), glow_mat)
 
@@ -1346,6 +1330,7 @@ class UTBot extends CharacterBody3D:
 					if orig is StandardMaterial3D:
 						var dup = orig.duplicate()
 						dup.albedo_color = dup.albedo_color * tint
+						dup.metallic = min(dup.metallic, 0.3)
 						mi.set_surface_override_material(s, dup)
 		for c in node.get_children():
 			_tint_meshes(c, tint)
@@ -1451,23 +1436,19 @@ class UTBot extends CharacterBody3D:
 			var fwd = flat_t.normalized() if dist > 0.05 else -global_transform.basis.z
 			var right = Vector3(-fwd.z, 0.0, fwd.x)
 
-			# Smoothly face target
 			var desired_yaw = atan2(-fwd.x, -fwd.z)
 			rotation.y = lerp_angle(rotation.y, desired_yaw, clamp(delta * 10.0, 0.0, 1.0))
 
-			# Strafe + maintain optimal arena range
 			move_dir = right * strafe_dir * 0.85
 			if dist > 15.0:
 				move_dir += fwd * 0.75
 			elif dist < 6.5:
 				move_dir -= fwd * 0.55
 
-			# Occasional combat jump
 			if is_on_floor() and jump_cd <= 0.0 and randf() < 0.03:
 				velocity.y = 8.8
 				jump_cd = randf_range(1.5, 3.0)
 
-			# Shoot!
 			if fire_cd <= 0.0 and dist < 44.0:
 				_fire_at(target)
 		else:
@@ -1481,7 +1462,6 @@ class UTBot extends CharacterBody3D:
 				var wyaw = atan2(-move_dir.x, -move_dir.z)
 				rotation.y = lerp_angle(rotation.y, wyaw, clamp(delta * 7.0, 0.0, 1.0))
 
-		# Pit avoidance steering (keep bots from walking straight into acid)
 		if global_position.y < 2.2:
 			var next_p = global_position + move_dir * 2.2
 			if abs(next_p.x) < 7.8 and abs(next_p.z) < 9.8:
@@ -1508,7 +1488,6 @@ class UTBot extends CharacterBody3D:
 		var aim = (target.global_position + Vector3(0, 1.15, 0) - origin)
 		var dist = aim.length()
 		var dir = aim.normalized()
-		# Fair human-like spread
 		dir += Vector3(randf_range(-0.06, 0.06), randf_range(-0.04, 0.04), randf_range(-0.06, 0.06))
 		dir = dir.normalized()
 		var mult = 2.0 if udamage_timer > 0.0 else 1.0
@@ -1533,7 +1512,7 @@ class UTBot extends CharacterBody3D:
 			arena.register_kill(attacker, self, weapon_name)
 			var col = Color(1.0, 0.25, 0.18) if team == 1 else Color(0.2, 0.85, 1.0)
 			var fx = UTExplosionFX.new()
-			fx.setup(global_position + Vector3(0, 1.0, 0), 1.9, col, 0.30)
+			fx.setup(global_position + Vector3(0, 1.0, 0), 1.9, col, 0.28)
 			arena.add_child(fx)
 			arena.effects.append(fx)
 
@@ -1548,7 +1527,7 @@ class UTProjectile extends Node3D:
 	var dmg: int = 20
 	var splash: float = 0.0
 	var bounces: int = 0
-	var life: float = 4.0
+	var life: float = 3.6
 
 	func setup(p: Vector3, v: Vector3, k: String, att, d: int, sp: float, bnc: int) -> void:
 		position = p
@@ -1565,6 +1544,7 @@ class UTProjectile extends Node3D:
 			cm.top_radius = 0.07
 			cm.bottom_radius = 0.09
 			cm.height = 0.55
+			cm.radial_segments = 8
 			mi.mesh = cm
 			mi.rotation_degrees = Vector3(90, 0, 0)
 			mi.material_override = arena.mat_glow_orange
@@ -1577,12 +1557,16 @@ class UTProjectile extends Node3D:
 			var sm = SphereMesh.new()
 			sm.radius = 0.16
 			sm.height = 0.32
+			sm.radial_segments = 10
+			sm.rings = 6
 			mi.mesh = sm
 			mi.material_override = arena.mat_glow_orange
 		else:
 			var sm2 = SphereMesh.new()
 			sm2.radius = 0.13
 			sm2.height = 0.26
+			sm2.radial_segments = 8
+			sm2.rings = 6
 			mi.mesh = sm2
 			mi.material_override = arena.mat_glow_green if (attacker == arena.player or attacker.team == 0) else arena.mat_glow_red
 		add_child(mi)
@@ -1625,7 +1609,7 @@ class UTProjectile extends Node3D:
 					arena.spawn_explosion(hp_pos + hn * 0.15, splash, Color(1.0, 0.52, 0.12), dmg, attacker, _wep_label(), 13.5)
 				else:
 					var fx = UTExplosionFX.new()
-					fx.setup(hp_pos, 0.45, Color(0.4, 1.0, 0.5) if kind == "plasma" else Color(1.0, 0.65, 0.2), 0.14)
+					fx.setup(hp_pos, 0.45, Color(0.4, 1.0, 0.5) if kind == "plasma" else Color(1.0, 0.65, 0.2), 0.12)
 					arena.add_child(fx)
 					arena.effects.append(fx)
 				return false
@@ -1665,6 +1649,8 @@ class UTShockCore extends Area3D:
 		var sm = SphereMesh.new()
 		sm.radius = 0.34
 		sm.height = 0.68
+		sm.radial_segments = 12
+		sm.rings = 8
 		mi.mesh = sm
 		mi.material_override = arena.mat_glow_purple
 		add_child(mi)
@@ -1707,6 +1693,7 @@ class UTBeamFX extends Node3D:
 		cm.top_radius = rad
 		cm.bottom_radius = rad
 		cm.height = dist
+		cm.radial_segments = 8
 		mi.mesh = cm
 		mat = StandardMaterial3D.new()
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -1729,8 +1716,8 @@ class UTBeamFX extends Node3D:
 		return true
 
 class UTExplosionFX extends Node3D:
-	var life: float = 0.35
-	var max_life: float = 0.35
+	var life: float = 0.34
+	var max_life: float = 0.34
 	var target_r: float = 3.0
 	var mat: StandardMaterial3D = null
 	var mesh_node: MeshInstance3D = null
@@ -1744,6 +1731,8 @@ class UTExplosionFX extends Node3D:
 		var sm = SphereMesh.new()
 		sm.radius = 0.45
 		sm.height = 0.9
+		sm.radial_segments = 10
+		sm.rings = 6
 		mesh_node.mesh = sm
 		mat = StandardMaterial3D.new()
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -1763,7 +1752,7 @@ class UTExplosionFX extends Node3D:
 		return true
 
 # ==============================================================================
-# UT2004 METALLIC MOBILE HUD + RESPONSIVE MULTI-TOUCH CONTROLS
+# UT2004 MOBILE HUD + CLEAN MULTI-TOUCH CONTROLS
 # ==============================================================================
 class UTHUD extends CanvasLayer:
 	var arena: Node3D = null
@@ -1779,6 +1768,7 @@ class UTHUD extends CanvasLayer:
 	var hp_bar: ProgressBar = null
 	var armor_bar: ProgressBar = null
 
+	var last_vs: Vector2 = Vector2.ZERO
 	var joy_center: Vector2 = Vector2(165, 540)
 	var joy_radius: float = 95.0
 	var joy_knob: Vector2 = Vector2.ZERO
@@ -1806,7 +1796,7 @@ class UTHUD extends CanvasLayer:
 		flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root.add_child(flash_rect)
 
-		score_lbl = _make_label(22, Color(0.92, 0.96, 1.0))
+		score_lbl = _make_label(22, Color(0.95, 0.98, 1.0))
 		score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		score_lbl.set_anchors_preset(Control.PRESET_TOP_WIDE)
 		score_lbl.offset_top = 12
@@ -1820,7 +1810,7 @@ class UTHUD extends CanvasLayer:
 		fps_lbl.offset_top = 14
 		root.add_child(fps_lbl)
 
-		killfeed_lbl = _make_label(15, Color(0.88, 0.92, 0.98))
+		killfeed_lbl = _make_label(15, Color(0.92, 0.95, 1.0))
 		killfeed_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		killfeed_lbl.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		killfeed_lbl.offset_left = -380
@@ -1834,7 +1824,7 @@ class UTHUD extends CanvasLayer:
 		banner_lbl.offset_top = 82
 		root.add_child(banner_lbl)
 
-		status_lbl = _make_label(18, Color(0.95, 0.97, 1.0))
+		status_lbl = _make_label(18, Color(0.96, 0.98, 1.0))
 		status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		status_lbl.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 		status_lbl.offset_top = -44
@@ -1845,7 +1835,7 @@ class UTHUD extends CanvasLayer:
 		root.add_child(hp_bar)
 		root.add_child(armor_bar)
 
-		_layout_controls()
+		_layout_controls(true)
 
 	func _make_label(sz: int, col: Color) -> Label:
 		var l = Label.new()
@@ -1873,8 +1863,11 @@ class UTHUD extends CanvasLayer:
 		pb.add_theme_stylebox_override("fill", fg)
 		return pb
 
-	func _layout_controls() -> void:
+	func _layout_controls(force: bool = false) -> void:
 		var vs = get_viewport().get_visible_rect().size
+		if not force and vs == last_vs:
+			return
+		last_vs = vs
 		var w = vs.x
 		var h = vs.y
 		joy_center = Vector2(w * 0.13, h * 0.75)
@@ -1979,7 +1972,7 @@ class UTHUD extends CanvasLayer:
 		arena.player.touch_move = diff / joy_radius
 
 	func _process(delta: float) -> void:
-		_layout_controls()
+		_layout_controls(false)
 		if hitmarker_timer > 0.0:
 			hitmarker_timer = max(0.0, hitmarker_timer - delta)
 		if banner_timer > 0.0:
@@ -2010,7 +2003,6 @@ class UTHUD extends CanvasLayer:
 		var c = vs * 0.5
 		var font = ThemeDB.fallback_font
 
-		# Dynamic UT2004 crosshair
 		var c_col = Color(0.78, 0.35, 1.0)
 		if arena.player.current_weapon == 1:
 			c_col = Color(1.0, 0.72, 0.15)
@@ -2032,13 +2024,11 @@ class UTHUD extends CanvasLayer:
 			root.draw_line(c + Vector2(-12, 12), c + Vector2(-5, 5), hc, 2.8)
 			root.draw_line(c + Vector2(12, 12), c + Vector2(5, 5), hc, 2.8)
 
-		# Sleek translucent virtual joystick
 		root.draw_circle(joy_center, joy_radius, Color(0.06, 0.09, 0.14, 0.36))
 		root.draw_arc(joy_center, joy_radius, 0.0, TAU, 36, Color(0.25, 0.85, 1.0, 0.55), 2.2)
 		root.draw_circle(joy_center + joy_knob, joy_radius * 0.36, Color(0.25, 0.85, 1.0, 0.58))
 		root.draw_arc(joy_center + joy_knob, joy_radius * 0.36, 0.0, TAU, 24, Color(0.9, 0.98, 1.0, 0.85), 2.0)
 
-		# Touch action buttons
 		_draw_btn(btn_rects["fire"], "FIRE", Color(0.95, 0.22, 0.18), arena.player.touch_fire, font)
 		_draw_btn(btn_rects["alt"], "ALT", Color(0.72, 0.25, 0.98), arena.player.touch_alt, font)
 		_draw_btn(btn_rects["jump"], "JUMP", Color(0.18, 0.78, 0.96), false, font)
