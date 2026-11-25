@@ -17,6 +17,7 @@ jobs:
       - name: Download 3D soldier model and CC0 PBR textures
         run: |
           mkdir -p assets/models assets/textures assets/audio /tmp/dl
+          (apt-get update -qq && apt-get install -y -qq python3 unzip espeak-ng) || true
 
           curl -fsSL -L "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb" \
             -o assets/models/soldier.glb || true
@@ -44,7 +45,6 @@ jobs:
       - name: Generate arena soundtrack and announcer voice lines
         run: |
           mkdir -p assets/audio
-          (apt-get update -qq && apt-get install -y -qq espeak-ng) || true
 
           python3 - << 'PYEOF'
           import math, os, random, shutil, struct, subprocess, wave
@@ -56,195 +56,10 @@ jobs:
           def gen_bgm(path):
               sr = 22050
               bpm = 132.0
-              step_sec = 60.0 / bpm / 4.0  # 16th note
-              total_steps = 64             # 4 bars
+              step_sec = 60.0 / bpm / 4.0
+              total_steps = 64
               n_samples = int(total_steps * step_sec * sr)
               buf = [0.0] * n_samples
               rng = random.Random(2004)
 
-              # D minor cyber-industrial bass & arp pattern (Hz)
-              bass_notes = [73.42, 73.42, 87.31, 73.42, 65.41, 65.41, 82.41, 98.00]
-              arp_notes = [293.66, 349.23, 440.00, 349.23, 523.25, 440.00, 349.23, 329.63]
-
-              for s in range(total_steps):
-                  t0 = int(s * step_sec * sr)
-                  slen = int(step_sec * sr)
-                  bar = s // 16
-                  in_bar = s % 16
-
-                  # Kick on 0, 4, 8, 12 (+ syncopated 14 every 2nd bar)
-                  if in_bar in (0, 4, 8, 12) or (bar % 2 == 1 and in_bar == 14):
-                      klen = min(int(0.16 * sr), n_samples - t0)
-                      ph = 0.0
-                      for i in range(klen):
-                          u = i / float(klen)
-                          f = 135.0 * ((1.0 - u) ** 2.4) + 38.0
-                          ph += 2.0 * math.pi * f / sr
-                          env = (1.0 - u) ** 1.5
-                          buf[t0 + i] += math.sin(ph) * env * 0.58
-
-                  # Industrial Snare on 4, 12
-                  if in_bar in (4, 12):
-                      snlen = min(int(0.14 * sr), n_samples - t0)
-                      for i in range(snlen):
-                          u = i / float(snlen)
-                          env = (1.0 - u) ** 2.2
-                          tone = math.sin(2.0 * math.pi * 195.0 * i / sr) * 0.4
-                          nz = rng.uniform(-1.0, 1.0) * 0.6
-                          buf[t0 + i] += (tone + nz) * env * 0.38
-
-                  # Metallic Hi-hat on off-beats
-                  if in_bar % 2 == 1:
-                      hlen = min(int(0.045 * sr), n_samples - t0)
-                      for i in range(hlen):
-                          u = i / float(hlen)
-                          env = (1.0 - u) ** 3.0
-                          buf[t0 + i] += rng.uniform(-1.0, 1.0) * env * 0.14
-
-                  # Acid saw bassline on 16ths
-                  bf = bass_notes[(s // 2) % len(bass_notes)]
-                  if bar == 3 and in_bar >= 12:
-                      bf *= 1.122
-                  for i in range(min(slen, n_samples - t0)):
-                      u = i / float(slen)
-                      t = (t0 + i) / float(sr)
-                      saw = 2.0 * ((t * bf) % 1.0) - 1.0
-                      sub = math.sin(2.0 * math.pi * bf * t)
-                      env = (1.0 - u * 0.65)
-                      buf[t0 + i] += (saw * 0.22 + sub * 0.24) * env * 0.45
-
-                  # High dark synth arpeggio
-                  if s % 2 == 0:
-                      af = arp_notes[(s // 2 + bar) % len(arp_notes)]
-                      alen = min(int(step_sec * 1.7 * sr), n_samples - t0)
-                      for i in range(alen):
-                          u = i / float(alen)
-                          t = (t0 + i) / float(sr)
-                          sq = 1.0 if math.sin(2.0 * math.pi * af * t) >= 0 else -1.0
-                          det = math.sin(2.0 * math.pi * af * 1.006 * t)
-                          env = math.sin(min(1.0, u * 12.0) * math.pi * 0.5) * ((1.0 - u) ** 1.4)
-                          buf[t0 + i] += (sq * 0.35 + det * 0.65) * env * 0.13
-
-              # Soft limiter & write 16-bit WAV
-              peak = max(0.001, max(abs(x) for x in buf))
-              scale = 0.85 / peak
-              data = bytearray(n_samples * 2)
-              for i, x in enumerate(buf):
-                  v = max(-32767, min(32767, int(math.tanh(x * scale * 1.25) * 30000)))
-                  struct.pack_into("<h", data, i * 2, v)
-              with wave.open(path, "wb") as wf:
-                  wf.setnchannels(1)
-                  wf.setsampwidth(2)
-                  wf.setframerate(sr)
-                  wf.writeframes(data)
-
-          gen_bgm(os.path.join(OUT, "bgm_arena.wav"))
-
-          # 2. Generate deep cyber-announcer lines if espeak-ng is available
-          if shutil.which("espeak-ng"):
-              lines = {
-                  "ann_play": "Play!",
-                  "ann_firstblood": "First Blood!",
-                  "ann_double": "Double Kill!",
-                  "ann_multi": "Multi Kill!",
-                  "ann_monster": "Monster Kill!",
-                  "ann_spree": "Killing Spree!",
-                  "ann_unstoppable": "Unstoppable!",
-                  "ann_combo": "Shock Combo!",
-                  "ann_udamage": "Double Damage!",
-                  "ann_victory": "You have won the match!"
-              }
-              for key, phrase in lines.items():
-                  raw_p = f"/tmp/{key}_raw.wav"
-                  out_p = os.path.join(OUT, f"{key}.wav")
-                  try:
-                      subprocess.run(
-                          ["espeak-ng", "-v", "en-us+m3", "-p", "22", "-s", "128", "-w", raw_p, phrase],
-                          check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                      )
-                      with wave.open(raw_p, "rb") as rf:
-                          sr = rf.getframerate()
-                          raw = rf.readframes(rf.getnframes())
-                      samples = list(struct.unpack(f"<{len(raw)//2}h", raw))
-                      # Pitch shift down (~0.80x) for deep booming UT2004 announcer voice
-                      pitch = 0.80
-                      new_len = int(len(samples) / pitch)
-                      pitched = [0.0] * (new_len + int(sr * 0.45))
-                      for i in range(new_len):
-                          src = i * pitch
-                          i0 = int(src)
-                          frac = src - i0
-                          s0 = samples[i0] if i0 < len(samples) else 0
-                          s1 = samples[i0 + 1] if i0 + 1 < len(samples) else s0
-                          pitched[i] = (s0 * (1.0 - frac) + s1 * frac) / 32768.0
-                      # Arena stadium echo + thickening
-                      d1 = int(sr * 0.095)
-                      d2 = int(sr * 0.195)
-                      d3 = int(sr * 0.310)
-                      wet = list(pitched)
-                      for i in range(len(wet)):
-                          v = pitched[i]
-                          if i >= d1:
-                              v += pitched[i - d1] * 0.34
-                          if i >= d2:
-                              v += pitched[i - d2] * 0.20
-                          if i >= d3:
-                              v += pitched[i - d3] * 0.11
-                          wet[i] = v
-                      peak = max(0.001, max(abs(x) for x in wet))
-                      scale = 0.92 / peak
-                      out_bytes = bytearray(len(wet) * 2)
-                      for i, x in enumerate(wet):
-                          iv = max(-32767, min(32767, int(math.tanh(x * scale * 1.2) * 31000)))
-                          struct.pack_into("<h", out_bytes, i * 2, iv)
-                      with wave.open(out_p, "wb") as wf:
-                          wf.setnchannels(1)
-                          wf.setsampwidth(2)
-                          wf.setframerate(sr)
-                          wf.writeframes(out_bytes)
-                  except Exception as e:
-                      print("Announcer gen skipped:", key, e)
-
-          print("Generated audio files:", sorted(os.listdir(OUT)))
-          PYEOF
-          ls -lh assets/audio
-
-      - name: Setup Android keystore and Godot editor settings
-        run: |
-          mkdir -p ~/.local/share/godot ~/.config/godot build/android
-          if [ -d /root/.local/share/godot/export_templates ]; then
-            cp -rn /root/.local/share/godot/export_templates ~/.local/share/godot/
-          fi
-          if [ -d /root/.config/godot ]; then
-            cp -rn /root/.config/godot/* ~/.config/godot/ || true
-          fi
-
-          KEYSTORE_PATH="/root/debug.keystore"
-          if [ ! -f "$KEYSTORE_PATH" ]; then
-            keytool -genkeypair -v -keystore "$KEYSTORE_PATH" \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-
-          SETTINGS_FILE="$HOME/.config/godot/editor_settings-4.3.tres"
-          if [ ! -f "$SETTINGS_FILE" ]; then
-            godot --headless --editor --quit || true
-          fi
-          if [ -f "$SETTINGS_FILE" ]; then
-            sed -i '/export\/android\/debug_keystore/d' "$SETTINGS_FILE"
-            sed -i '/export\/android\/android_sdk_path/d' "$SETTINGS_FILE"
-            printf '\nexport/android/android_sdk_path = "/usr/lib/android-sdk"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$KEYSTORE_PATH" >> "$SETTINGS_FILE"
-          fi
-
-      - name: Import project resources
-        run: godot --headless --import || true
-
-      - name: Export Android APK
-        run: godot --headless --verbose --export-debug "Android" build/android/ut2004-mobile.apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ut2004-mobile-apk
-          path: build/android/ut2004-mobile.apk
+              bass_notes = [73.42, 73.42, 87.31,
