@@ -1,21 +1,26 @@
 config_version=5
 
 [application]
+
 config/name="UT2004 Mobile Arena"
-run/main_scene="res://scenes/MainArena.tscn"
+run/main_scene="res://MainArena.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
 [autoload]
-GameMode="*res://scripts/GameModeManager.gd"
+
+GameModeManager="*res://scripts/GameModeManager.gd"
 SoundFX="*res://scripts/SoundFX.gd"
 
 [display]
+
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 window/handheld/orientation=0
 
 [rendering]
+
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
