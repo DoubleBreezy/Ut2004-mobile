@@ -14,7 +14,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Godot templates & Android SDK settings
+      - name: Download 3D soldier model and CC0 PBR textures
+        run: |
+          mkdir -p assets/models assets/textures /tmp/dl
+
+          curl -fsSL -L "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb" \
+            -o assets/models/soldier.glb || true
+
+          download_pbr() {
+            ASSET_ID="$1"
+            PREFIX="$2"
+            ZIP_FILE="/tmp/dl/${ASSET_ID}.zip"
+            OUT_DIR="/tmp/dl/${ASSET_ID}"
+            mkdir -p "$OUT_DIR"
+            if curl -fsSL -L -A "Mozilla/5.0" "https://ambientcg.com/get?file=${ASSET_ID}_1K-JPG.zip" -o "$ZIP_FILE"; then
+              python3 -c "import zipfile; zipfile.ZipFile('$ZIP_FILE').extractall('$OUT_DIR')" 2>/dev/null || unzip -oq "$ZIP_FILE" -d "$OUT_DIR" || true
+              cp "$OUT_DIR"/*_Color.jpg "assets/textures/${PREFIX}_color.jpg" 2>/dev/null || true
+              cp "$OUT_DIR"/*_NormalGL.jpg "assets/textures/${PREFIX}_normal.jpg" 2>/dev/null || true
+              cp "$OUT_DIR"/*_Roughness.jpg "assets/textures/${PREFIX}_roughness.jpg" 2>/dev/null || true
+              cp "$OUT_DIR"/*_Metalness.jpg "assets/textures/${PREFIX}_metalness.jpg" 2>/dev/null || true
+            fi
+          }
+
+          download_pbr "DiamondPlate008C" "floor"
+          download_pbr "Metal049A" "wall"
+
+          ls -lh assets/models assets/textures
+
+      - name: Setup Android keystore and Godot editor settings
         run: |
           mkdir -p ~/.local/share/godot ~/.config/godot build/android
           if [ -d /root/.local/share/godot/export_templates ]; then
@@ -23,20 +50,23 @@ jobs:
           if [ -d /root/.config/godot ]; then
             cp -rn /root/.config/godot/* ~/.config/godot/ || true
           fi
-          if [ ! -f /root/debug.keystore ]; then
-            keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
-              -keystore /root/debug.keystore -storepass android \
-              -dname "CN=Android Debug,O=Android,C=US" -validity 9999
+
+          KEYSTORE_PATH="/root/debug.keystore"
+          if [ ! -f "$KEYSTORE_PATH" ]; then
+            keytool -genkeypair -v -keystore "$KEYSTORE_PATH" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
+
           SETTINGS_FILE="$HOME/.config/godot/editor_settings-4.3.tres"
           if [ ! -f "$SETTINGS_FILE" ]; then
             godot --headless --editor --quit || true
           fi
           if [ -f "$SETTINGS_FILE" ]; then
-            grep -q 'export/android/android_sdk_path' "$SETTINGS_FILE" || echo 'export/android/android_sdk_path = "/usr/lib/android-sdk"' >> "$SETTINGS_FILE"
-            grep -q 'export/android/debug_keystore' "$SETTINGS_FILE" || echo 'export/android/debug_keystore = "/root/debug.keystore"' >> "$SETTINGS_FILE"
-            grep -q 'export/android/debug_keystore_user' "$SETTINGS_FILE" || echo 'export/android/debug_keystore_user = "androiddebugkey"' >> "$SETTINGS_FILE"
-            grep -q 'export/android/debug_keystore_pass' "$SETTINGS_FILE" || echo 'export/android/debug_keystore_pass = "android"' >> "$SETTINGS_FILE"
+            sed -i '/export\/android\/debug_keystore/d' "$SETTINGS_FILE"
+            sed -i '/export\/android\/android_sdk_path/d' "$SETTINGS_FILE"
+            printf '\nexport/android/android_sdk_path = "/usr/lib/android-sdk"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$KEYSTORE_PATH" >> "$SETTINGS_FILE"
           fi
 
       - name: Import project resources
