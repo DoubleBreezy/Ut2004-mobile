@@ -1,62 +1,37 @@
-name: Build Android APK (Godot 4.3)
-
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
-
+name: Build APK
+on: [push, workflow_dispatch]
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.3
+    container: barichello/godot-ci:4.3
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download 3D soldier model and CC0 PBR textures
-        run: |
-          mkdir -p assets/models assets/textures assets/audio /tmp/dl
-          (apt-get update -qq && apt-get install -y -qq python3 unzip espeak-ng) || true
-
-          curl -fsSL -L "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb" \
-            -o assets/models/soldier.glb || true
-
-          download_pbr() {
-            ASSET_ID="$1"
-            PREFIX="$2"
-            ZIP_FILE="/tmp/dl/${ASSET_ID}.zip"
-            OUT_DIR="/tmp/dl/${ASSET_ID}"
-            mkdir -p "$OUT_DIR"
-            if curl -fsSL -L -A "Mozilla/5.0" "https://ambientcg.com/get?file=${ASSET_ID}_1K-JPG.zip" -o "$ZIP_FILE"; then
-              python3 -c "import zipfile; zipfile.ZipFile('$ZIP_FILE').extractall('$OUT_DIR')" 2>/dev/null || unzip -oq "$ZIP_FILE" -d "$OUT_DIR" || true
-              cp "$OUT_DIR"/*_Color.jpg "assets/textures/${PREFIX}_color.jpg" 2>/dev/null || true
-              cp "$OUT_DIR"/*_NormalGL.jpg "assets/textures/${PREFIX}_normal.jpg" 2>/dev/null || true
-              cp "$OUT_DIR"/*_Roughness.jpg "assets/textures/${PREFIX}_roughness.jpg" 2>/dev/null || true
-              cp "$OUT_DIR"/*_Metalness.jpg "assets/textures/${PREFIX}_metalness.jpg" 2>/dev/null || true
-            fi
-          }
-
-          download_pbr "DiamondPlate008C" "floor"
-          download_pbr "Metal049A" "wall"
-
-          ls -lh assets/models assets/textures
-
-      - name: Generate arena soundtrack and announcer voice lines
-        run: |
-          mkdir -p assets/audio
-          python3 - << 'PYEOF'
-          import math, os, random, shutil, struct, subprocess, wave
-
-          OUT = "assets/audio"
-          os.makedirs(OUT, exist_ok=True)
-
-          def gen_bgm(path):
-              sr = 22050
-              step_sec = 60.0 / 132.0 / 4.0
-              total_steps = 64
-              n_samples = int(total_steps * step_sec * sr)
-              buf = [0.0] * n_samples
-              rng = random.Random(2004)
-              bass = [73.4, 73.4, 87.3, 73.4, 65.4, 65.4, 82.4, 98.0]
-              arp = [293.7, 349.2, 440.0, 34
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p assets/models assets/textures assets/audio /tmp/d
+          (apt-get update -qq && apt-get install -y -qq unzip espeak-ng) || true
+          curl -fsSL "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb" -o assets/models/soldier.glb || true
+          for p in "DiamondPlate008C floor" "Metal049A wall"; do
+            set -- $p
+            curl -fsSL -A "Mozilla/5.0" "https://ambientcg.com/get?file=${1}_1K-JPG.zip" -o /tmp/d/$1.zip && unzip -oq /tmp/d/$1.zip -d /tmp/d/$1 || true
+            for m in Color:color NormalGL:normal Roughness:roughness Metalness:metalness; do
+              cp /tmp/d/$1/*_${m%:*}.jpg assets/textures/${2}_${m#*:}.jpg 2>/dev/null || true
+            done
+          done
+          for l in "play|Play" "firstblood|First Blood" "double|Double Kill" "multi|Multi Kill" "monster|Monster Kill" "spree|Killing Spree" "unstoppable|Unstoppable" "combo|Shock Combo" "udamage|Double Damage" "victory|You win"; do
+            espeak-ng -v en-us+m3 -p 18 -s 125 -w "assets/audio/ann_${l%|*}.wav" "${l#*|}" || true
+          done
+      - run: |
+          mkdir -p ~/.local/share/godot ~/.config/godot build/android
+          cp -rn /root/.local/share/godot/export_templates ~/.local/share/godot/ 2>/dev/null || true
+          cp -rn /root/.config/godot/* ~/.config/godot/ 2>/dev/null || true
+          [ -f /root/debug.keystore ] || keytool -genkeypair -keystore /root/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 9999 -dname "CN=Android,O=Android,C=US"
+          S="$HOME/.config/godot/editor_settings-4.3.tres"
+          [ -f "$S" ] || godot --headless --editor --quit || true
+          sed -i '/export\/android\/debug_keystore/d;/export\/android\/android_sdk_path/d' "$S" 2>/dev/null || true
+          printf '\nexport/android/android_sdk_path = "/usr/lib/android-sdk"\nexport/android/debug_keystore = "/root/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' >> "$S"
+          godot --headless --import || true
+          godot --headless --verbose --export-debug "Android" build/android/ut2004-mobile.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ut2004-mobile-apk
+          path: build/android/ut2004-mobile.apk
