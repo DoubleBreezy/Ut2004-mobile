@@ -260,12 +260,12 @@ func _explode(origin: Vector3, radius: float, max_dmg: int, impulse: float, owne
 	for unit in get_tree().get_nodes_in_group("combatants"):
 		if not is_instance_valid(unit):
 			continue
-		var center := unit.global_position + Vector3(0, 0.9, 0)
+		var center = unit.global_position + Vector3(0, 0.9, 0)
 		var dist := origin.distance_to(center)
 		if dist <= radius:
 			var falloff := 1.0 - (dist / radius)
 			var dmg := int(max_dmg * falloff)
-			var dir := (center - origin).normalized()
+			var dir = (center - origin).normalized()
 			if dir.length() < 0.01:
 				dir = Vector3.UP
 			unit.take_damage(dmg, owner_body, dir * impulse * falloff)
