@@ -8,7 +8,7 @@ config/features=PackedStringArray("4.3", "GL Compatibility")
 
 [autoload]
 
-GameModeManager="*res://scripts/GameModeManager.gd"
+GameMode="*res://scripts/GameModeManager.gd"
 SoundFX="*res://scripts/SoundFX.gd"
 
 [display]
