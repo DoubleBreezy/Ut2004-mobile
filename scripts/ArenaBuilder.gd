@@ -2,7 +2,7 @@ extends Node3D
 
 # ==============================================================================
 # UT2004 MOBILE ARENA — DM-DECK17 NEXT-GEN EDITION
-# Smart Weapon-Switching Bots + Muzzle-Aligned Rifles + Anti-Stuck AI + 60 FPS
+# Fixed Bot Strafing + Death Pose + Full-Map Roaming + Clear Team Contrast
 # ==============================================================================
 
 const LAYER_WORLD: int = 1
@@ -55,6 +55,8 @@ var mat_glow_orange: StandardMaterial3D = null
 var mat_glow_purple: StandardMaterial3D = null
 var mat_glow_green: StandardMaterial3D = null
 var mat_glow_red: StandardMaterial3D = null
+var mat_team_blue: StandardMaterial3D = null
+var mat_team_red: StandardMaterial3D = null
 var mat_acid: ShaderMaterial = null
 
 var spawn_points_blue: Array = []
@@ -265,6 +267,24 @@ func _load_assets_and_materials() -> void:
 	mat_glow_purple = _make_glow_material(Color(0.82, 0.28, 1.0), 3.1)
 	mat_glow_green = _make_glow_material(Color(0.18, 1.0, 0.38), 2.8)
 	mat_glow_red = _make_glow_material(Color(1.0, 0.22, 0.16), 2.9)
+
+	# High-contrast team armor materials
+	mat_team_blue = StandardMaterial3D.new()
+	mat_team_blue.albedo_color = Color(0.12, 0.52, 1.0)
+	mat_team_blue.metallic = 0.35
+	mat_team_blue.roughness = 0.36
+	mat_team_blue.emission_enabled = true
+	mat_team_blue.emission = Color(0.06, 0.32, 0.78)
+	mat_team_blue.emission_energy_multiplier = 0.65
+
+	mat_team_red = StandardMaterial3D.new()
+	mat_team_red.albedo_color = Color(1.0, 0.18, 0.12)
+	mat_team_red.metallic = 0.35
+	mat_team_red.roughness = 0.36
+	mat_team_red.emission_enabled = true
+	mat_team_red.emission = Color(0.82, 0.10, 0.06)
+	mat_team_red.emission_energy_multiplier = 0.72
+
 	mat_acid = _make_acid_shader_material()
 
 func _make_pbr_material(prefix: String, tint: Color, rough: float, metal: float, uv_scale: Vector3, is_diamond: bool, use_normal: bool) -> StandardMaterial3D:
@@ -1058,7 +1078,7 @@ func spawn_shock_core(pos: Vector3, vel: Vector3, attacker) -> void:
 	shock_cores.append(sc)
 
 # ==============================================================================
-# AUDIO ENGINE: PRE-GENERATED MULTI-LAYER WAV SFX + BGM + ANNOUNCER + FOOTSTEPS
+# AUDIO ENGINE
 # ==============================================================================
 class UTSoundBank extends Node:
 	var bank: Dictionary = {}
@@ -1191,7 +1211,7 @@ class UTSoundBank extends Node:
 		p.play()
 
 # ==============================================================================
-# PLAYER CONTROLLER (Next-Gen Detailed Viewmodels + Muzzle Cones + Footsteps)
+# PLAYER CONTROLLER
 # ==============================================================================
 class UTPlayer extends CharacterBody3D:
 	var arena: Node3D = null
@@ -1785,7 +1805,7 @@ class UTPlayer extends CharacterBody3D:
 			arena.sfx.play_announcer("ann_unstoppable")
 
 # ==============================================================================
-# SKELETAL 3D SOLDIER BOT (Aim-Aligned Rifle + Distance Weapon Switching + Anti-Stuck)
+# SKELETAL 3D SOLDIER BOT (Clean Strafing + Proper Death Pose + Map Roaming)
 # ==============================================================================
 class UTBot extends CharacterBody3D:
 	var arena: Node3D = null
@@ -1796,8 +1816,10 @@ class UTBot extends CharacterBody3D:
 	var armor: int = 20
 	var udamage_timer: float = 0.0
 	var respawn_timer: float = 0.0
+	var death_anim_done: bool = false
 
 	var visual_root: Node3D = null
+	var body_rig: Node3D = null
 	var gun_pivot: Node3D = null
 	var muzzle_marker: Node3D = null
 	var gun_glow_mat: StandardMaterial3D = null
@@ -1806,7 +1828,7 @@ class UTBot extends CharacterBody3D:
 	var anim_run: String = ""
 	var current_anim: String = ""
 
-	var active_weapon: int = 3  # 0=Shock, 1=Flak, 2=Rocket, 3=Link
+	var active_weapon: int = 3
 	var strafe_dir: float = 1.0
 	var strafe_timer: float = 1.2
 	var fire_cd: float = 0.65
@@ -1833,14 +1855,18 @@ class UTBot extends CharacterBody3D:
 
 		visual_root = Node3D.new()
 		add_child(visual_root)
+		body_rig = Node3D.new()
+		visual_root.add_child(body_rig)
 		_build_visual()
 
 	func _build_visual() -> void:
 		var is_blue = (team == 0)
 		var glow_mat = arena.mat_glow_cyan if is_blue else arena.mat_glow_red
+		var team_mat = arena.mat_team_blue if is_blue else arena.mat_team_red
 		if team >= 10:
 			glow_mat = arena.mat_glow_orange if (team % 2 == 0) else arena.mat_glow_red
-		var armor_tint = Color(0.45, 0.78, 1.0) if is_blue else Color(1.0, 0.45, 0.42)
+			team_mat = arena.mat_glow_orange if (team % 2 == 0) else arena.mat_team_red
+		var armor_tint = Color(0.28, 0.72, 1.0) if is_blue else Color(1.0, 0.26, 0.22)
 
 		gun_glow_mat = StandardMaterial3D.new()
 		gun_glow_mat.albedo_color = glow_mat.albedo_color
@@ -1852,12 +1878,12 @@ class UTBot extends CharacterBody3D:
 			var model = arena.soldier_scene.instantiate()
 			model.scale = Vector3(1.08, 1.08, 1.08)
 			model.rotation.y = PI
-			visual_root.add_child(model)
+			body_rig.add_child(model)
 			_tint_meshes(model, armor_tint)
 
 			var skel = _find_skeleton(model)
 			if skel != null:
-				_attach_bone_gear(skel, glow_mat)
+				_attach_bone_gear(skel, glow_mat, team_mat)
 
 			anim_player = _find_anim_player(model)
 			if anim_player != null:
@@ -1876,22 +1902,22 @@ class UTBot extends CharacterBody3D:
 				if anim_idle == "":
 					anim_idle = anim_run
 		else:
-			var body_mat = StandardMaterial3D.new()
-			body_mat.albedo_color = Color(0.20, 0.42, 0.72) if is_blue else Color(0.68, 0.22, 0.20)
-			body_mat.metallic = 0.75
-			body_mat.roughness = 0.30
-			_part(visual_root, Vector3(0, 1.15, 0), Vector3(0.56, 0.68, 0.34), body_mat)
-			_part(visual_root, Vector3(0, 1.66, 0), Vector3(0.32, 0.34, 0.34), body_mat)
-			_part(visual_root, Vector3(-0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), body_mat)
-			_part(visual_root, Vector3(0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), body_mat)
-			_part(visual_root, Vector3(-0.38, 1.15, 0), Vector3(0.18, 0.68, 0.20), body_mat)
-			_part(visual_root, Vector3(0.38, 1.15, -0.15), Vector3(0.18, 0.62, 0.20), body_mat)
-			_part(visual_root, Vector3(0, 1.68, -0.18), Vector3(0.26, 0.09, 0.06), glow_mat)
+			_part(body_rig, Vector3(0, 1.15, 0), Vector3(0.56, 0.68, 0.34), team_mat)
+			_part(body_rig, Vector3(0, 1.66, 0), Vector3(0.32, 0.34, 0.34), team_mat)
+			_part(body_rig, Vector3(-0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), arena.mat_dark_steel)
+			_part(body_rig, Vector3(0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), arena.mat_dark_steel)
+			_part(body_rig, Vector3(-0.38, 1.15, 0), Vector3(0.18, 0.68, 0.20), team_mat)
+			_part(body_rig, Vector3(0.38, 1.15, -0.15), Vector3(0.18, 0.62, 0.20), team_mat)
+			_part(body_rig, Vector3(0, 1.68, -0.18), Vector3(0.26, 0.09, 0.06), glow_mat)
 
-		# Dedicated aim-aligned 3D weapon mount so shots always emerge cleanly from the barrel toward target
+		# Clear bright team shoulder pauldrons & crest so allies vs enemies pop immediately
+		_part(body_rig, Vector3(-0.36, 1.46, 0.0), Vector3(0.18, 0.14, 0.24), team_mat)
+		_part(body_rig, Vector3(0.36, 1.46, 0.0), Vector3(0.18, 0.14, 0.24), team_mat)
+		_part(body_rig, Vector3(0.0, 1.76, -0.02), Vector3(0.08, 0.10, 0.26), glow_mat)
+
 		gun_pivot = Node3D.new()
 		gun_pivot.position = Vector3(0.30, 1.32, 0.0)
-		visual_root.add_child(gun_pivot)
+		body_rig.add_child(gun_pivot)
 
 		_part(gun_pivot, Vector3(0.0, 0.0, -0.24), Vector3(0.11, 0.13, 0.64), arena.mat_dark_steel)
 		_part(gun_pivot, Vector3(0.0, 0.05, -0.28), Vector3(0.06, 0.04, 0.48), gun_glow_mat)
@@ -1905,17 +1931,17 @@ class UTBot extends CharacterBody3D:
 		active_weapon = wep_idx
 		if gun_glow_mat == null:
 			return
-		var col = Color(0.82, 0.32, 1.0)      # 0: Shock Rifle
+		var col = Color(0.82, 0.32, 1.0)
 		if wep_idx == 1:
-			col = Color(1.0, 0.62, 0.14)      # 1: Flak Cannon (close range)
+			col = Color(1.0, 0.62, 0.14)
 		elif wep_idx == 2:
-			col = Color(1.0, 0.26, 0.18)      # 2: Rocket Launcher (long/splash)
+			col = Color(1.0, 0.26, 0.18)
 		elif wep_idx == 3:
-			col = Color(0.22, 1.0, 0.42)      # 3: Link Gun (mid range)
+			col = Color(0.22, 1.0, 0.42)
 		gun_glow_mat.albedo_color = col
 		gun_glow_mat.emission = col
 
-	func _attach_bone_gear(skel: Skeleton3D, glow_mat: Material) -> void:
+	func _attach_bone_gear(skel: Skeleton3D, glow_mat: Material, team_mat: Material) -> void:
 		var chest_idx = -1
 		var head_idx = -1
 		for i in range(skel.get_bone_count()):
@@ -1929,13 +1955,13 @@ class UTBot extends CharacterBody3D:
 			var ba_c = BoneAttachment3D.new()
 			ba_c.bone_name = skel.get_bone_name(chest_idx)
 			skel.add_child(ba_c)
-			_part(ba_c, Vector3(0, 0.08, -0.14), Vector3(0.18, 0.22, 0.08), glow_mat)
+			_part(ba_c, Vector3(0, 0.08, -0.14), Vector3(0.24, 0.26, 0.10), team_mat)
 
 		if head_idx != -1:
 			var ba_h = BoneAttachment3D.new()
 			ba_h.bone_name = skel.get_bone_name(head_idx)
 			skel.add_child(ba_h)
-			_part(ba_h, Vector3(0, 0.10, 0.11), Vector3(0.16, 0.05, 0.05), glow_mat)
+			_part(ba_h, Vector3(0, 0.10, 0.11), Vector3(0.18, 0.06, 0.06), glow_mat)
 
 	func _part(parent: Node3D, pos: Vector3, sz: Vector3, mat: Material) -> void:
 		var mi = MeshInstance3D.new()
@@ -1955,8 +1981,8 @@ class UTBot extends CharacterBody3D:
 					if orig is StandardMaterial3D:
 						var dup = orig.duplicate()
 						dup.albedo_color = dup.albedo_color * tint
-						dup.metallic = 0.55
-						dup.roughness = 0.36
+						dup.metallic = 0.45
+						dup.roughness = 0.38
 						mi.set_surface_override_material(s, dup)
 		for c in node.get_children():
 			_tint_meshes(c, tint)
@@ -1979,14 +2005,23 @@ class UTBot extends CharacterBody3D:
 				return found
 		return null
 
-	func _play_anim(name: String) -> void:
-		if anim_player == null or name == "" or current_anim == name:
+	func _play_anim(name: String, spd: float = 1.0) -> void:
+		if anim_player == null or name == "":
 			return
-		current_anim = name
-		anim_player.play(name, 0.18)
+		if current_anim != name:
+			current_anim = name
+			anim_player.play(name, 0.15)
+		anim_player.speed_scale = spd
+
+	func _freeze_death_anim() -> void:
+		if anim_player != null:
+			if anim_idle != "":
+				anim_player.play(anim_idle, 0.05)
+			anim_player.speed_scale = 0.0
 
 	func respawn() -> void:
 		alive = true
+		death_anim_done = false
 		hp = 100
 		armor = 0 if arena.cfg_mode == 2 else 20
 		udamage_timer = 0.0
@@ -1994,12 +2029,14 @@ class UTBot extends CharacterBody3D:
 		global_position = arena.get_spawn_point(team) + Vector3(randf_range(-2.4, 2.4), 0.1, randf_range(-2.4, 2.4))
 		last_pos = global_position
 		stuck_timer = 0.0
+		current_anim = ""
 		visual_root.visible = true
-		visual_root.rotation = Vector3.ZERO
+		body_rig.rotation = Vector3.ZERO
+		body_rig.position = Vector3.ZERO
 		collision_layer = 2
-		_pick_smart_waypoint()
+		_pick_map_waypoint()
 
-	func _pick_smart_waypoint() -> void:
+	func _pick_map_waypoint() -> void:
 		if arena.cfg_mode != 2:
 			var best_p = Vector3.ZERO
 			var found_p = false
@@ -2018,27 +2055,32 @@ class UTBot extends CharacterBody3D:
 					found_p = true
 			if found_p:
 				waypoint = best_p
-				waypoint_timer = 3.8
+				waypoint_timer = 3.5
 				return
 
+		# Wide spread across all sectors of DM-Deck17
 		var spots = [
-			Vector3(-12.5, 0.2, -14.0),
-			Vector3(12.5, 0.2, 14.0),
-			Vector3(13.5, 0.2, -14.5),
-			Vector3(-13.5, 0.2, 14.5),
-			Vector3(-14.0, 0.2, 0.0),
-			Vector3(14.0, 0.2, 0.0),
-			Vector3(0.0, 4.6, 0.0),
-			Vector3(-19.5, 4.6, 0.0),
-			Vector3(19.5, 4.6, 0.0),
-			Vector3(0.0, 4.6, -22.5),
-			Vector3(0.0, 4.6, 22.5)
+			Vector3(-19.5, 4.6, -16.0), # NW upper balcony
+			Vector3(19.5, 4.6, -16.0),  # NE upper balcony
+			Vector3(-19.5, 4.6, 16.0),  # SW upper balcony
+			Vector3(19.5, 4.6, 16.0),   # SE upper balcony
+			Vector3(0.0, 4.6, -23.5),   # North upper catwalk
+			Vector3(0.0, 4.6, 23.5),    # South upper catwalk
+			Vector3(0.0, 4.6, 0.0),     # Central bridge
+			Vector3(-12.5, 0.2, -13.0), # NW ramp base
+			Vector3(12.5, 0.2, 13.0),   # SE ramp base
+			Vector3(13.5, 0.2, -14.5),  # NE jump pad
+			Vector3(-13.5, 0.2, 14.5),  # SW jump pad
+			Vector3(-18.0, 0.2, 0.0),   # West lower lane
+			Vector3(18.0, 0.2, 0.0),    # East lower lane
+			Vector3(0.0, 0.2, -21.0),   # North lower hall
+			Vector3(0.0, 0.2, 21.0)     # South lower hall
 		]
 		var next_w = spots[randi() % spots.size()]
-		if next_w.distance_to(global_position) < 3.0:
-			next_w = spots[(randi() + 1) % spots.size()]
+		if next_w.distance_to(global_position) < 4.5:
+			next_w = spots[(randi() + 5) % spots.size()]
 		waypoint = next_w
-		waypoint_timer = randf_range(3.0, 5.0)
+		waypoint_timer = randf_range(2.8, 4.8)
 
 	func _find_target():
 		var best = null
@@ -2070,7 +2112,12 @@ class UTBot extends CharacterBody3D:
 			return
 		if not alive:
 			respawn_timer -= delta
-			visual_root.rotation.x = lerp(visual_root.rotation.x, -1.45, delta * 6.0)
+			# Fall back cleanly onto ground without running legs
+			body_rig.rotation.x = lerp(body_rig.rotation.x, -1.48, clamp(delta * 9.0, 0.0, 1.0))
+			body_rig.position.y = lerp(body_rig.position.y, -0.55, clamp(delta * 8.0, 0.0, 1.0))
+			if body_rig.rotation.x <= -1.25 and not death_anim_done:
+				death_anim_done = true
+				_freeze_death_anim()
 			if respawn_timer <= 0.0:
 				respawn()
 			return
@@ -2105,28 +2152,27 @@ class UTBot extends CharacterBody3D:
 			var fwd = flat_t.normalized() if dist > 0.05 else -global_transform.basis.z
 			var right = Vector3(-fwd.z, 0.0, fwd.x)
 
-			# Face target cleanly with bot body and aim rifle at target torso/head
 			var desired_yaw = atan2(-fwd.x, -fwd.z)
 			rotation.y = lerp_angle(rotation.y, desired_yaw, clamp(delta * 12.0, 0.0, 1.0))
 			var aim_pt = target.global_position + Vector3(0, 1.22, 0)
 			var up_v = Vector3.UP if abs(gun_pivot.global_position.direction_to(aim_pt).dot(Vector3.UP)) < 0.98 else Vector3.RIGHT
 			gun_pivot.look_at(aim_pt, up_v)
 
-			# Choose optimal weapon by combat range
 			if arena.cfg_mode == 2:
 				_set_bot_weapon(0)
 			elif dist < 9.5:
-				_set_bot_weapon(1)       # Close quarters -> Flak Cannon
+				_set_bot_weapon(1)
 			elif dist > 22.0:
-				_set_bot_weapon(2 if randf() < 0.65 else 0) # Long range -> Rocket / Shock
+				_set_bot_weapon(2 if randf() < 0.65 else 0)
 			else:
-				_set_bot_weapon(3 if randf() < 0.6 else 0)  # Mid range -> Link / Shock
+				_set_bot_weapon(3 if randf() < 0.6 else 0)
 
-			move_dir = right * strafe_dir * 0.95
-			if dist > 15.0:
-				move_dir += fwd * 0.78
+			# Combine strafe + forward/back in world space, then align body_rig naturally to velocity direction
+			move_dir = right * strafe_dir * 0.90
+			if dist > 16.0:
+				move_dir += fwd * 0.75
 			elif dist < 6.0:
-				move_dir -= fwd * 0.65
+				move_dir -= fwd * 0.60
 
 			if is_on_floor() and jump_cd <= 0.0 and randf() < 0.03:
 				velocity.y = 8.9
@@ -2136,8 +2182,8 @@ class UTBot extends CharacterBody3D:
 				_fire_at(aim_pt, dist)
 		else:
 			waypoint_timer -= delta
-			if waypoint_timer <= 0.0 or global_position.distance_to(waypoint) < 2.2:
-				_pick_smart_waypoint()
+			if waypoint_timer <= 0.0 or global_position.distance_to(waypoint) < 2.4:
+				_pick_map_waypoint()
 			var to_w = waypoint - global_position
 			to_w.y = 0.0
 			if to_w.length() > 0.2:
@@ -2146,15 +2192,24 @@ class UTBot extends CharacterBody3D:
 				rotation.y = lerp_angle(rotation.y, wyaw, clamp(delta * 8.5, 0.0, 1.0))
 				gun_pivot.rotation = Vector3.ZERO
 
+		# Light anti-clumping nudge so bots spread across the arena instead of stacking on one spot
+		for other in arena.bots:
+			if other != self and is_instance_valid(other) and other.alive:
+				var diff = global_position - other.global_position
+				diff.y = 0.0
+				var d_o = diff.length()
+				if d_o > 0.01 and d_o < 2.2:
+					move_dir += (diff / d_o) * ((2.2 - d_o) * 0.65)
+
 		# Acid pit avoidance steering
 		if global_position.y < 2.2:
-			var next_p = global_position + move_dir * 2.3
+			var next_p = global_position + move_dir * 2.4
 			if abs(next_p.x) < 7.8 and abs(next_p.z) < 9.8:
 				var away = Vector3(global_position.x, 0.0, global_position.z).normalized()
 				var tang = Vector3(-away.z, 0.0, away.x) * strafe_dir
-				move_dir = (away * 0.75 + tang * 0.8).normalized()
+				move_dir = (away * 0.8 + tang * 0.85).normalized()
 
-		# Anti-stuck guard: never let a bot freeze in place on a corner/prop
+		# Anti-stuck guard
 		if global_position.distance_to(last_pos) < 0.25:
 			stuck_timer += delta
 			if stuck_timer > 0.75:
@@ -2162,7 +2217,7 @@ class UTBot extends CharacterBody3D:
 				strafe_dir = -strafe_dir
 				if is_on_floor():
 					velocity.y = 8.6
-				_pick_smart_waypoint()
+				_pick_map_waypoint()
 				var escape = (waypoint - global_position)
 				escape.y = 0.0
 				if escape.length() > 0.1:
@@ -2178,10 +2233,22 @@ class UTBot extends CharacterBody3D:
 			var smooth = 4.0 if hlen > bot_spd + 1.5 else 9.0
 			velocity.x = lerp(velocity.x, move_dir.x * bot_spd, clamp(delta * smooth, 0.0, 1.0))
 			velocity.z = lerp(velocity.z, move_dir.z * bot_spd, clamp(delta * smooth, 0.0, 1.0))
-			_play_anim(anim_run)
+
+			# Turn body_rig toward movement vector when roaming; angle slightly when strafing in combat
+			var vel_flat = Vector3(velocity.x, 0.0, velocity.z)
+			if vel_flat.length() > 0.6:
+				var move_yaw = atan2(-vel_flat.x, -vel_flat.z)
+				var rel_yaw = wrapf(move_yaw - rotation.y, -PI, PI)
+				body_rig.rotation.y = lerp_angle(body_rig.rotation.y, rel_yaw * 0.65, clamp(delta * 10.0, 0.0, 1.0))
+				body_rig.rotation.z = lerp(body_rig.rotation.z, clamp(-sin(rel_yaw) * 0.14, -0.16, 0.16), clamp(delta * 8.0, 0.0, 1.0))
+
+			var anim_spd = clamp(vel_flat.length() / 7.5, 0.75, 1.35)
+			_play_anim(anim_run, anim_spd)
 		else:
-			_pick_smart_waypoint()
-			_play_anim(anim_idle)
+			body_rig.rotation.y = lerp_angle(body_rig.rotation.y, 0.0, clamp(delta * 8.0, 0.0, 1.0))
+			body_rig.rotation.z = lerp(body_rig.rotation.z, 0.0, clamp(delta * 8.0, 0.0, 1.0))
+			_pick_map_waypoint()
+			_play_anim(anim_idle, 1.0)
 
 		move_and_slide()
 		arena.check_jump_pads(self)
@@ -2213,17 +2280,14 @@ class UTBot extends CharacterBody3D:
 			return
 
 		if active_weapon == 1:
-			# Close-range Flak volley from the barrel
 			fire_cd = randf_range(0.58, 0.92) * cd_mult
 			for i in range(5):
 				var fdir = (dir + Vector3(randf_range(-0.075, 0.075), randf_range(-0.045, 0.045), randf_range(-0.075, 0.075))).normalized()
 				arena.spawn_projectile(origin, fdir * 44.0, "flak", self, int(10 * mult), 0.0, 1)
 		elif active_weapon == 2 and dist > 18.0:
-			# Long-range Rocket
 			fire_cd = randf_range(0.78, 1.22) * cd_mult
 			arena.spawn_projectile(origin, dir * 32.0, "rocket", self, int(36 * mult), 4.4, 0)
 		elif active_weapon == 0:
-			# Shock Rifle precision beam
 			fire_cd = randf_range(0.68, 1.05) * cd_mult
 			var space = get_world_3d().direct_space_state
 			var q = PhysicsRayQueryParameters3D.create(origin, origin + dir * 95.0, 1 | 2)
@@ -2238,7 +2302,6 @@ class UTBot extends CharacterBody3D:
 					arena.spawn_sparks(end_p, Color(0.82, 0.35, 1.0), 8)
 			arena.spawn_beam(origin, end_p, Color(0.82, 0.35, 1.0), 0.045, 0.14)
 		else:
-			# Mid-range Link Gun plasma
 			fire_cd = randf_range(0.32, 0.55) * cd_mult
 			arena.spawn_projectile(origin, dir * 45.0, "plasma", self, int(13 * mult), 0.0, 0)
 
@@ -2260,8 +2323,11 @@ class UTBot extends CharacterBody3D:
 		if hp <= 0:
 			hp = 0
 			alive = false
+			death_anim_done = false
 			respawn_timer = 2.8
 			collision_layer = 0
+			velocity = Vector3(impulse.x * 0.35, max(velocity.y, 2.2), impulse.z * 0.35)
+			_freeze_death_anim()
 			arena.register_kill(attacker, self, weapon_name)
 			var col = Color(0.2, 0.85, 1.0) if team == 0 else Color(1.0, 0.25, 0.18)
 			var fx = UTExplosionFX.new()
