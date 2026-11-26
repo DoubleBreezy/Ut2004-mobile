@@ -7,28 +7,64 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download 3D Soldier & PBR Textures
+            - name: Download 3D Soldier & PBR Textures
         run: |
           mkdir -p assets/models assets/textures assets/audio /tmp/d
           (apt-get update -qq && apt-get install -y -qq python3 unzip espeak-ng) || true
 
-          for url in \
-            "https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Soldier.glb" \
-            "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb" \
-            "https://threejs.org/examples/models/gltf/Soldier.glb"; do
-            if curl -fsSL -L --retry 3 "$url" -o assets/models/soldier.glb && [ -s assets/models/soldier.glb ]; then
-              echo "Downloaded Soldier.glb from $url"
-              break
-            fi
-          done
+          python3 - << 'PYEOF'
+          import os, urllib.request, zipfile
 
-          for p in "DiamondPlate008C floor" "Metal049A wall"; do
-            set -- $p
-            curl -fsSL -L -A "Mozilla/5.0" "https://ambientcg.com/get?file=${1}_1K-JPG.zip" -o /tmp/d/$1.zip && unzip -oq /tmp/d/$1.zip -d /tmp/d/$1 || true
-            for m in Color:color NormalGL:normal Roughness:roughness Metalness:metalness; do
-              cp /tmp/d/$1/*_${m%:*}.jpg assets/textures/${2}_${m#*:}.jpg 2>/dev/null || true
-            done
-          done
+          os.makedirs("assets/models", exist_ok=True)
+          os.makedirs("assets/textures", exist_ok=True)
+          os.makedirs("/tmp/d", exist_ok=True)
+
+          def fetch(urls, dst):
+              for u in urls:
+                  try:
+                      req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+                      with urllib.request.urlopen(req, timeout=25) as r, open(dst, "wb") as f:
+                          f.write(r.read())
+                      if os.path.exists(dst) and os.path.getsize(dst) > 1000:
+                          print("OK:", dst, os.path.getsize(dst), "bytes <-", u)
+                          return True
+                  except Exception as e:
+                      print("Fail:", u, e)
+              return False
+
+          fetch([
+              "https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Soldier.glb",
+              "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb",
+              "https://threejs.org/examples/models/gltf/Soldier.glb"
+          ], "assets/models/soldier.glb")
+
+          pbr_sets = [("DiamondPlate008C", "floor"), ("Metal049A", "wall")]
+          maps = [("Color", "color"), ("NormalGL", "normal"), ("Roughness", "roughness"), ("Metalness", "metalness")]
+
+          for aid, prefix in pbr_sets:
+              zpath = f"/tmp/d/{aid}.zip"
+              edir = f"/tmp/d/{aid}"
+              if fetch([f"https://ambientcg.com/get?file={aid}_1K-JPG.zip"], zpath):
+                  try:
+                      with zipfile.ZipFile(zpath, "r") as zf:
+                          zf.extractall(edir)
+                      for root_d, _, files in os.walk(edir):
+                          for fn in files:
+                              if not fn.lower().endswith(".jpg"):
+                                  continue
+                              for tag, out_tag in maps:
+                                  if f"_{tag}." in fn:
+                                      src_f = os.path.join(root_d, fn)
+                                      dst_f = f"assets/textures/{prefix}_{out_tag}.jpg"
+                                      with open(src_f, "rb") as sf, open(dst_f, "wb") as df:
+                                          df.write(sf.read())
+                                      print("Texture:", dst_f, os.path.getsize(dst_f), "bytes")
+                  except Exception as e:
+                      print("Unzip fail:", aid, e)
+          PYEOF
+
           ls -lh assets/models assets/textures
+
 
       - name: Generate Cyberpunk Audio & Announcer
         run: |
