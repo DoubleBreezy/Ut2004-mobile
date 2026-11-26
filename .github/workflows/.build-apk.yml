@@ -6,7 +6,6 @@ jobs:
     container: barichello/godot-ci:4.3
     steps:
       - uses: actions/checkout@v4
-      - name: Download 3D Soldier & PBR Textures
             - name: Download 3D Soldier & PBR Textures
         run: |
           mkdir -p assets/models assets/textures assets/audio /tmp/d
