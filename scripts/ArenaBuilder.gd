@@ -1,7 +1,8 @@
 extends Node3D
 
 # ==============================================================================
-# UT2004 MOBILE ARENA — DM-DECK17 & DM-TOKARA FOREST (BIOLUMINESCENT UPGRADE)
+# UT2004 MOBILE ARENA — NEXT-GEN 1K PBR + DSP 3D AUDIO EDITION
+# Maps: DM-TokaraForest (Low-G Bioluminescent Jungle) & DM-Deck17 (Orbital Steel)
 # ==============================================================================
 
 const LAYER_WORLD: int = 1
@@ -42,9 +43,11 @@ var frag_limit: int = 25
 var match_time: float = 300.0
 var first_blood_done: bool = false
 
-# Assets & Materials
+# Assets & PBR Materials
 var soldier_scene: PackedScene = null
 var world_env: WorldEnvironment = null
+var sun_key: DirectionalLight3D = null
+var sun_rim: DirectionalLight3D = null
 var map_root: Node3D = null
 var orbital_station: Node3D = null
 
@@ -58,13 +61,17 @@ var mat_glass: StandardMaterial3D = null
 
 var mat_forest_ground: StandardMaterial3D = null
 var mat_bark: StandardMaterial3D = null
+var mat_rock: StandardMaterial3D = null
 var mat_canopy: StandardMaterial3D = null
 var mat_bio_bridge: StandardMaterial3D = null
 var mat_flora_pink: StandardMaterial3D = null
 var mat_flora_purple: StandardMaterial3D = null
 var mat_flora_stem: StandardMaterial3D = null
+var mat_light_shaft: StandardMaterial3D = null
 var mat_liquid_vat: ShaderMaterial = null
 
+var mat_team_blue: StandardMaterial3D = null
+var mat_team_red: StandardMaterial3D = null
 var mat_glow_cyan: StandardMaterial3D = null
 var mat_glow_orange: StandardMaterial3D = null
 var mat_glow_purple: StandardMaterial3D = null
@@ -93,8 +100,7 @@ var sfx: UTSoundBank = null
 var acid_damage_timer: float = 0.0
 
 func get_gravity_accel() -> float:
-	# Low-gravity environment on Tokara Forest (~0.45x normal gravity)
-	return 10.4 if cfg_map == MAP_TOKARA else 23.0
+	return 10.2 if cfg_map == MAP_TOKARA else 23.0
 
 func get_jump_impulse() -> float:
 	return 11.4 if cfg_map == MAP_TOKARA else 9.4
@@ -117,7 +123,7 @@ func _ready() -> void:
 
 	menu_cam = Camera3D.new()
 	menu_cam.fov = 74.0
-	menu_cam.far = 260.0
+	menu_cam.far = 280.0
 	add_child(menu_cam)
 	menu_cam.current = true
 
@@ -140,6 +146,7 @@ func _ready() -> void:
 	add_child(menu_ui)
 	menu_ui.open_main_menu()
 
+	sfx.set_map_bgm(cfg_map)
 	sfx.set_music_enabled(cfg_music_on)
 
 func _apply_graphics_settings() -> void:
@@ -148,7 +155,7 @@ func _apply_graphics_settings() -> void:
 	root_win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	root_win.content_scale_size = Vector2i(1280, 720)
 	root_win.msaa_3d = Viewport.MSAA_2X
-	root_win.scaling_3d_scale = 0.90 if cfg_high_gfx else 0.78
+	root_win.scaling_3d_scale = 0.88 if cfg_high_gfx else 0.76
 	Engine.max_fps = 60
 	if world_env != null and world_env.environment != null:
 		world_env.environment.glow_enabled = cfg_high_gfx
@@ -159,13 +166,13 @@ func select_map_preview(map_id: int) -> void:
 	cfg_map = map_id
 	_rebuild_current_map(false)
 	_spawn_bots_roster()
+	sfx.set_map_bgm(cfg_map)
 
 func _rebuild_current_map(initial: bool) -> void:
 	if map_root != null and is_instance_valid(map_root):
 		map_root.queue_free()
 		map_root = null
-	if orbital_station != null and is_instance_valid(orbital_station):
-		orbital_station = null
+	orbital_station = null
 
 	jump_pads.clear()
 	pickups.clear()
@@ -207,17 +214,22 @@ func _update_atmosphere_for_map() -> void:
 	var env = world_env.environment
 	var sky_mat = env.sky.sky_material as ProceduralSkyMaterial
 	if cfg_map == MAP_TOKARA:
-		# Deep lush Tokara jungle dusk with soft emerald-teal shafts & violet horizon haze
 		if sky_mat != null:
-			sky_mat.sky_top_color = Color(0.015, 0.055, 0.065)
-			sky_mat.sky_horizon_color = Color(0.14, 0.24, 0.28)
+			sky_mat.sky_top_color = Color(0.015, 0.045, 0.075)
+			sky_mat.sky_horizon_color = Color(0.16, 0.24, 0.34)
 			sky_mat.ground_bottom_color = Color(0.015, 0.04, 0.03)
-			sky_mat.ground_horizon_color = Color(0.06, 0.14, 0.13)
-			sky_mat.sky_energy_multiplier = 0.95
-		env.fog_light_color = Color(0.04, 0.11, 0.12)
-		env.fog_density = 0.0048
-		env.ambient_light_energy = 0.34
-		env.tonemap_exposure = 1.02
+			sky_mat.ground_horizon_color = Color(0.06, 0.14, 0.14)
+			sky_mat.sky_energy_multiplier = 0.92
+		env.fog_light_color = Color(0.045, 0.105, 0.125)
+		env.fog_density = 0.0044
+		env.ambient_light_energy = 0.36
+		env.tonemap_exposure = 1.04
+		if sun_key != null:
+			sun_key.light_color = Color(0.92, 0.96, 0.84)
+			sun_key.light_energy = 0.78
+		if sun_rim != null:
+			sun_rim.light_color = Color(0.58, 0.38, 0.86)
+			sun_rim.light_energy = 0.34
 	else:
 		if sky_mat != null:
 			sky_mat.sky_top_color = Color(0.015, 0.025, 0.06)
@@ -227,8 +239,14 @@ func _update_atmosphere_for_map() -> void:
 			sky_mat.sky_energy_multiplier = 1.05
 		env.fog_light_color = Color(0.04, 0.07, 0.11)
 		env.fog_density = 0.0042
-		env.ambient_light_energy = 0.42
+		env.ambient_light_energy = 0.40
 		env.tonemap_exposure = 1.05
+		if sun_key != null:
+			sun_key.light_color = Color(0.96, 0.85, 0.72)
+			sun_key.light_energy = 0.74
+		if sun_rim != null:
+			sun_rim.light_color = Color(0.36, 0.74, 1.0)
+			sun_rim.light_energy = 0.38
 
 func start_new_match() -> void:
 	score_blue = 0
@@ -240,6 +258,7 @@ func start_new_match() -> void:
 
 	_rebuild_current_map(true)
 	_spawn_bots_roster()
+	sfx.set_map_bgm(cfg_map)
 
 	player.team = TEAM_BLUE
 	player.visible = true
@@ -259,7 +278,7 @@ func start_new_match() -> void:
 	elif cfg_mode == MODE_INSTAGIB:
 		m_title = "INSTAGIB ARENA"
 	var map_tag = "TOKARA LOW-G" if cfg_map == MAP_TOKARA else "DECK17"
-	hud.show_banner("%s [%s] — FIGHT!" % [m_title, map_tag], Color(0.35, 0.92, 0.78))
+	hud.show_banner("%s [%s] — FIGHT!" % [m_title, map_tag], Color(0.35, 0.92, 0.82))
 	sfx.play_announcer("ann_play")
 
 func pause_match() -> void:
@@ -300,6 +319,68 @@ func _finish_match(winner_text: String, win_col: Color) -> void:
 	sfx.play_announcer("ann_victory")
 	menu_ui.open_match_over(winner_text, win_col)
 
+# ==============================================================================
+# 1K PBR TEXTURE LOADER (Uses all packs downloaded by .build-apk.yml)
+# ==============================================================================
+func _load_tex_safe(path: String) -> Texture2D:
+	if ResourceLoader.exists(path):
+		var res = ResourceLoader.load(path)
+		if res is Texture2D:
+			return res
+	if FileAccess.file_exists(path):
+		var img = Image.new()
+		if img.load(path) == OK:
+			img.generate_mipmaps()
+			return ImageTexture.create_from_image(img)
+	return null
+
+func _make_full_pbr(prefix: String, tint: Color, rough: float, metal: float, uv_scale: Vector3, norm_strength: float, fallback_kind: String) -> StandardMaterial3D:
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = tint
+	mat.roughness = rough
+	mat.metallic = metal
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = true
+	mat.uv1_scale = uv_scale
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+
+	var t_col = _load_tex_safe("res://assets/textures/%s_color.jpg" % prefix)
+	var t_nor = _load_tex_safe("res://assets/textures/%s_normal.jpg" % prefix)
+	var t_rgh = _load_tex_safe("res://assets/textures/%s_roughness.jpg" % prefix)
+	var t_met = _load_tex_safe("res://assets/textures/%s_metalness.jpg" % prefix)
+
+	if t_col != null:
+		mat.albedo_texture = t_col
+	else:
+		if fallback_kind == "moss":
+			mat.albedo_texture = _make_moss_ground_albedo()
+		elif fallback_kind == "bark":
+			mat.albedo_texture = _make_bark_albedo()
+		else:
+			mat.albedo_texture = _make_procedural_metal_albedo(fallback_kind == "diamond")
+
+	if t_nor != null and norm_strength > 0.01:
+		mat.normal_enabled = true
+		mat.normal_texture = t_nor
+		mat.normal_scale = norm_strength
+	elif norm_strength > 0.01:
+		mat.normal_enabled = true
+		if fallback_kind == "bark":
+			mat.normal_texture = _make_bark_normal()
+		else:
+			mat.normal_texture = _make_procedural_metal_normal(fallback_kind == "diamond")
+		mat.normal_scale = norm_strength * 0.75
+
+	if t_rgh != null:
+		mat.roughness_texture = t_rgh
+		mat.roughness = rough
+
+	if t_met != null:
+		mat.metallic_texture = t_met
+		mat.metallic = metal
+
+	return mat
+
 func _load_assets_and_materials() -> void:
 	if ResourceLoader.exists("res://assets/models/soldier.glb"):
 		var loaded = ResourceLoader.load("res://assets/models/soldier.glb")
@@ -317,23 +398,30 @@ func _load_assets_and_materials() -> void:
 				soldier_scene = ps
 				root_node.queue_free()
 
-	mat_floor = _make_pbr_material("floor", Color(0.46, 0.52, 0.60), 0.42, 0.78, Vector3(0.11, 0.11, 0.11), true, true)
-	mat_wall = _make_pbr_material("wall", Color(0.38, 0.44, 0.52), 0.48, 0.72, Vector3(0.09, 0.09, 0.09), false, false)
+	# Deck17 Industrial PBR packs
+	mat_floor = _make_full_pbr("floor", Color(0.68, 0.73, 0.80), 0.56, 0.78, Vector3(0.11, 0.11, 0.11), 0.32, "diamond")
+	mat_wall = _make_full_pbr("wall", Color(0.60, 0.66, 0.74), 0.62, 0.72, Vector3(0.09, 0.09, 0.09), 0.38, "metal")
+
+	# Tokara Forest Organic + Alien Tech 1K PBR packs
+	mat_forest_ground = _make_full_pbr("moss", Color(0.68, 0.76, 0.66), 0.88, 0.04, Vector3(0.075, 0.075, 0.075), 0.72, "moss")
+	mat_bark = _make_full_pbr("bark", Color(0.66, 0.56, 0.48), 0.90, 0.02, Vector3(0.14, 0.14, 0.14), 0.85, "bark")
+	mat_rock = _make_full_pbr("rock", Color(0.56, 0.62, 0.64), 0.86, 0.06, Vector3(0.08, 0.08, 0.08), 0.82, "bark")
+	mat_bio_bridge = _make_full_pbr("bio", Color(0.46, 0.60, 0.62), 0.48, 0.74, Vector3(0.16, 0.16, 0.16), 0.50, "metal")
 
 	mat_dark_steel = StandardMaterial3D.new()
 	mat_dark_steel.albedo_color = Color(0.15, 0.18, 0.23)
-	mat_dark_steel.metallic = 0.78
-	mat_dark_steel.roughness = 0.36
+	mat_dark_steel.metallic = 0.80
+	mat_dark_steel.roughness = 0.34
 
 	mat_chrome = StandardMaterial3D.new()
-	mat_chrome.albedo_color = Color(0.72, 0.78, 0.86)
-	mat_chrome.metallic = 0.88
-	mat_chrome.roughness = 0.24
+	mat_chrome.albedo_color = Color(0.74, 0.80, 0.88)
+	mat_chrome.metallic = 0.90
+	mat_chrome.roughness = 0.22
 
 	mat_crate = StandardMaterial3D.new()
-	mat_crate.albedo_color = Color(0.24, 0.30, 0.36)
-	mat_crate.metallic = 0.58
-	mat_crate.roughness = 0.44
+	mat_crate.albedo_color = Color(0.26, 0.32, 0.38)
+	mat_crate.metallic = 0.62
+	mat_crate.roughness = 0.40
 
 	mat_glass = StandardMaterial3D.new()
 	mat_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -341,57 +429,42 @@ func _load_assets_and_materials() -> void:
 	mat_glass.roughness = 0.10
 	mat_glass.metallic = 0.20
 
-	# Richer organic PBR textures for Tokara Forest (mossy soil + grooved bark + bio-catwalks)
-	mat_forest_ground = StandardMaterial3D.new()
-	mat_forest_ground.albedo_texture = _make_moss_ground_albedo()
-	mat_forest_ground.normal_enabled = true
-	mat_forest_ground.normal_texture = _make_moss_ground_normal()
-	mat_forest_ground.normal_scale = 0.55
-	mat_forest_ground.roughness = 0.84
-	mat_forest_ground.metallic = 0.04
-	mat_forest_ground.uv1_triplanar = true
-	mat_forest_ground.uv1_world_triplanar = true
-	mat_forest_ground.uv1_scale = Vector3(0.08, 0.08, 0.08)
-
-	mat_bark = StandardMaterial3D.new()
-	mat_bark.albedo_texture = _make_bark_albedo()
-	mat_bark.normal_enabled = true
-	mat_bark.normal_texture = _make_bark_normal()
-	mat_bark.normal_scale = 0.65
-	mat_bark.roughness = 0.88
-	mat_bark.metallic = 0.02
-	mat_bark.uv1_triplanar = true
-	mat_bark.uv1_world_triplanar = true
-	mat_bark.uv1_scale = Vector3(0.18, 0.18, 0.18)
-
 	mat_canopy = StandardMaterial3D.new()
-	mat_canopy.albedo_color = Color(0.07, 0.24, 0.17)
-	mat_canopy.roughness = 0.76
-	mat_canopy.metallic = 0.05
-
-	mat_bio_bridge = StandardMaterial3D.new()
-	mat_bio_bridge.albedo_color = Color(0.18, 0.26, 0.28)
-	mat_bio_bridge.roughness = 0.44
-	mat_bio_bridge.metallic = 0.52
+	mat_canopy.albedo_color = Color(0.07, 0.22, 0.16)
+	mat_canopy.roughness = 0.82
+	mat_canopy.metallic = 0.02
+	if mat_forest_ground.albedo_texture != null:
+		mat_canopy.albedo_texture = mat_forest_ground.albedo_texture
+		mat_canopy.uv1_triplanar = true
+		mat_canopy.uv1_scale = Vector3(0.12, 0.12, 0.12)
 
 	mat_flora_stem = StandardMaterial3D.new()
-	mat_flora_stem.albedo_color = Color(0.12, 0.22, 0.24)
+	mat_flora_stem.albedo_color = Color(0.10, 0.22, 0.22)
 	mat_flora_stem.roughness = 0.65
 
-	# Soft, pleasant pink & purple bioluminescent flora (no harsh neon glare)
+	# Soft bioluminescent pink & violet flora
 	mat_flora_pink = StandardMaterial3D.new()
-	mat_flora_pink.albedo_color = Color(0.86, 0.36, 0.66)
-	mat_flora_pink.roughness = 0.32
+	mat_flora_pink.albedo_color = Color(0.88, 0.38, 0.68)
+	mat_flora_pink.roughness = 0.28
 	mat_flora_pink.emission_enabled = true
-	mat_flora_pink.emission = Color(0.78, 0.24, 0.56)
-	mat_flora_pink.emission_energy_multiplier = 1.35
+	mat_flora_pink.emission = Color(0.82, 0.26, 0.58)
+	mat_flora_pink.emission_energy_multiplier = 1.45
 
 	mat_flora_purple = StandardMaterial3D.new()
-	mat_flora_purple.albedo_color = Color(0.56, 0.34, 0.88)
-	mat_flora_purple.roughness = 0.32
+	mat_flora_purple.albedo_color = Color(0.58, 0.34, 0.92)
+	mat_flora_purple.roughness = 0.28
 	mat_flora_purple.emission_enabled = true
-	mat_flora_purple.emission = Color(0.48, 0.22, 0.82)
-	mat_flora_purple.emission_energy_multiplier = 1.40
+	mat_flora_purple.emission = Color(0.50, 0.22, 0.86)
+	mat_flora_purple.emission_energy_multiplier = 1.50
+
+	# Volumetric-style additive canopy light shafts (zero-cost god-rays)
+	mat_light_shaft = StandardMaterial3D.new()
+	mat_light_shaft.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat_light_shaft.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat_light_shaft.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat_light_shaft.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat_light_shaft.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	mat_light_shaft.albedo_color = Color(0.28, 0.78, 0.70, 0.055)
 
 	mat_liquid_vat = _make_liquid_vat_shader()
 
@@ -403,11 +476,27 @@ func _load_assets_and_materials() -> void:
 	mat_trim.uv1_world_triplanar = true
 	mat_trim.uv1_scale = Vector3(0.28, 0.28, 0.28)
 
-	mat_glow_cyan = _make_glow_material(Color(0.20, 0.86, 0.92), 2.1)
-	mat_glow_orange = _make_glow_material(Color(0.95, 0.56, 0.16), 2.0)
-	mat_glow_purple = _make_glow_material(Color(0.72, 0.30, 0.92), 2.3)
-	mat_glow_green = _make_glow_material(Color(0.22, 0.90, 0.48), 2.1)
-	mat_glow_red = _make_glow_material(Color(0.95, 0.24, 0.18), 2.2)
+	mat_team_blue = StandardMaterial3D.new()
+	mat_team_blue.albedo_color = Color(0.14, 0.56, 1.0)
+	mat_team_blue.metallic = 0.38
+	mat_team_blue.roughness = 0.35
+	mat_team_blue.emission_enabled = true
+	mat_team_blue.emission = Color(0.08, 0.36, 0.82)
+	mat_team_blue.emission_energy_multiplier = 0.70
+
+	mat_team_red = StandardMaterial3D.new()
+	mat_team_red.albedo_color = Color(1.0, 0.18, 0.14)
+	mat_team_red.metallic = 0.38
+	mat_team_red.roughness = 0.35
+	mat_team_red.emission_enabled = true
+	mat_team_red.emission = Color(0.84, 0.10, 0.06)
+	mat_team_red.emission_energy_multiplier = 0.75
+
+	mat_glow_cyan = _make_glow_material(Color(0.20, 0.88, 0.95), 2.2)
+	mat_glow_orange = _make_glow_material(Color(0.95, 0.56, 0.16), 2.1)
+	mat_glow_purple = _make_glow_material(Color(0.74, 0.30, 0.94), 2.4)
+	mat_glow_green = _make_glow_material(Color(0.22, 0.92, 0.48), 2.2)
+	mat_glow_red = _make_glow_material(Color(0.96, 0.24, 0.18), 2.3)
 	mat_acid = _make_acid_shader_material()
 
 func _make_moss_ground_albedo() -> ImageTexture:
@@ -417,21 +506,7 @@ func _make_moss_ground_albedo() -> ImageTexture:
 		for x in range(size):
 			var wave = sin(float(x) * 0.14) * cos(float(y) * 0.14) * 0.04
 			var speckle = float(((x * 29 + y * 67) % 17) - 8) * 0.005
-			var patch = ((x / 16 + y / 16) % 2) * 0.022
-			var r = clamp(0.11 + wave + speckle + patch * 0.5, 0.04, 0.35)
-			var g = clamp(0.21 + wave * 1.4 + speckle + patch, 0.08, 0.48)
-			var b = clamp(0.14 + wave + speckle + patch * 0.7, 0.05, 0.38)
-			img.set_pixel(x, y, Color(r, g, b, 1.0))
-	return ImageTexture.create_from_image(img)
-
-func _make_moss_ground_normal() -> ImageTexture:
-	var size = 128
-	var img = Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
-	for y in range(size):
-		for x in range(size):
-			var nx = 0.5 + sin(float(x) * 0.28) * 0.08
-			var ny = 0.5 + cos(float(y) * 0.28) * 0.08
-			img.set_pixel(x, y, Color(clamp(nx, 0.2, 0.8), clamp(ny, 0.2, 0.8), 0.96, 1.0))
+			img.set_pixel(x, y, Color(clamp(0.11 + wave + speckle, 0.04, 0.35), clamp(0.21 + wave * 1.4 + speckle, 0.08, 0.48), clamp(0.14 + wave + speckle, 0.05, 0.38), 1.0))
 	return ImageTexture.create_from_image(img)
 
 func _make_bark_albedo() -> ImageTexture:
@@ -440,11 +515,7 @@ func _make_bark_albedo() -> ImageTexture:
 	for y in range(size):
 		for x in range(size):
 			var ridge = sin(float(x) * 0.55 + sin(float(y) * 0.08) * 2.0) * 0.045
-			var grain = float(((x * 43 + y * 19) % 15) - 7) * 0.004
-			var r = clamp(0.20 + ridge + grain, 0.06, 0.38)
-			var g = clamp(0.14 + ridge * 0.8 + grain, 0.04, 0.28)
-			var b = clamp(0.10 + ridge * 0.6 + grain, 0.03, 0.22)
-			img.set_pixel(x, y, Color(r, g, b, 1.0))
+			img.set_pixel(x, y, Color(clamp(0.20 + ridge, 0.06, 0.38), clamp(0.14 + ridge * 0.8, 0.04, 0.28), clamp(0.10 + ridge * 0.6, 0.03, 0.22), 1.0))
 	return ImageTexture.create_from_image(img)
 
 func _make_bark_normal() -> ImageTexture:
@@ -465,17 +536,17 @@ render_mode cull_disabled;
 
 void fragment() {
 	vec2 uv = UV * 6.0;
-	float t = TIME * 1.35;
-	float ripple = sin(length(uv - vec2(3.0)) * 4.5 - t * 3.2) * 0.5 + 0.5;
-	float swirl = sin(uv.x * 2.4 + t) * cos(uv.y * 2.4 - t * 0.9) * 0.5 + 0.5;
+	float t = TIME * 1.45;
+	float ripple = sin(length(uv - vec2(3.0)) * 4.8 - t * 3.4) * 0.5 + 0.5;
+	float swirl = sin(uv.x * 2.6 + t) * cos(uv.y * 2.6 - t * 0.9) * 0.5 + 0.5;
 	float mix_f = clamp(ripple * 0.6 + swirl * 0.4, 0.0, 1.0);
-	vec3 deep_aqua = vec3(0.05, 0.36, 0.48);
-	vec3 lift_cyan = vec3(0.22, 0.84, 0.76);
+	vec3 deep_aqua = vec3(0.05, 0.36, 0.52);
+	vec3 lift_cyan = vec3(0.26, 0.90, 0.82);
 	vec3 col = mix(deep_aqua, lift_cyan, mix_f);
 	ALBEDO = col;
-	EMISSION = col * (1.1 + mix_f * 0.9);
-	ROUGHNESS = 0.16;
-	METALLIC = 0.12;
+	EMISSION = col * (1.15 + mix_f * 1.05);
+	ROUGHNESS = 0.14;
+	METALLIC = 0.16;
 }
 """
 	var sm = ShaderMaterial.new()
@@ -501,49 +572,19 @@ func _build_map_thumbnails() -> void:
 	var img2 = Image.create_empty(180, 100, false, Image.FORMAT_RGBA8)
 	for y in range(100):
 		for x in range(180):
-			var c = Color(0.03, 0.10, 0.09, 1.0)
+			var c = Color(0.03, 0.09, 0.10, 1.0)
 			if x > 8 and x < 172 and y > 8 and y < 92:
-				c = Color(0.08, 0.19, 0.14, 1.0)
+				c = Color(0.08, 0.20, 0.15, 1.0)
 			if (x > 25 and x < 155 and abs(y - 34) < 3) or (x > 25 and x < 155 and abs(y - 68) < 3):
-				c = Color(0.22, 0.78, 0.62, 1.0)
+				c = Color(0.24, 0.82, 0.76, 1.0)
 			var trunks = [Vector2(45, 22), Vector2(135, 22), Vector2(45, 78), Vector2(135, 78), Vector2(90, 50)]
 			for t in trunks:
-				if Vector2(x, y).distance_to(t) < 7.0:
-					c = Color(0.26, 0.18, 0.12, 1.0)
+				if Vector2(x, y).distance_to(t) < 6.5:
+					c = Color(0.28, 0.20, 0.14, 1.0)
 				elif Vector2(x, y).distance_to(t) < 9.5:
-					c = Color(0.76, 0.36, 0.78, 1.0)
+					c = Color(0.84, 0.36, 0.72, 1.0)
 			img2.set_pixel(x, y, c)
 	thumb_tokara = ImageTexture.create_from_image(img2)
-
-func _make_pbr_material(prefix: String, tint: Color, rough: float, metal: float, uv_scale: Vector3, is_diamond: bool, use_normal: bool) -> StandardMaterial3D:
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = tint
-	mat.roughness = rough
-	mat.metallic = metal
-	mat.uv1_triplanar = true
-	mat.uv1_world_triplanar = true
-	mat.uv1_scale = uv_scale
-
-	var p_col = "res://assets/textures/%s_color.jpg" % prefix
-	var p_nor = "res://assets/textures/%s_normal.jpg" % prefix
-
-	if ResourceLoader.exists(p_col):
-		mat.albedo_texture = ResourceLoader.load(p_col)
-		mat.albedo_color = Color(0.64, 0.68, 0.76)
-	else:
-		mat.albedo_texture = _make_procedural_metal_albedo(is_diamond)
-
-	if use_normal:
-		if ResourceLoader.exists(p_nor):
-			mat.normal_enabled = true
-			mat.normal_texture = ResourceLoader.load(p_nor)
-			mat.normal_scale = 0.28
-		else:
-			mat.normal_enabled = true
-			mat.normal_texture = _make_procedural_metal_normal(is_diamond)
-			mat.normal_scale = 0.25
-
-	return mat
 
 func _make_glow_material(col: Color, energy: float) -> StandardMaterial3D:
 	var m = StandardMaterial3D.new()
@@ -551,7 +592,7 @@ func _make_glow_material(col: Color, energy: float) -> StandardMaterial3D:
 	m.emission_enabled = true
 	m.emission = col
 	m.emission_energy_multiplier = energy
-	m.roughness = 0.24
+	m.roughness = 0.22
 	return m
 
 func _make_acid_shader_material() -> ShaderMaterial:
@@ -643,41 +684,39 @@ func _setup_environment() -> void:
 
 	var sky = Sky.new()
 	var sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.015, 0.055, 0.065)
-	sky_mat.sky_horizon_color = Color(0.14, 0.24, 0.28)
+	sky_mat.sky_top_color = Color(0.015, 0.045, 0.075)
+	sky_mat.sky_horizon_color = Color(0.16, 0.24, 0.34)
 	sky_mat.ground_bottom_color = Color(0.015, 0.04, 0.03)
-	sky_mat.ground_horizon_color = Color(0.06, 0.14, 0.13)
-	sky_mat.sky_energy_multiplier = 0.95
+	sky_mat.ground_horizon_color = Color(0.06, 0.14, 0.14)
+	sky_mat.sky_energy_multiplier = 0.92
 	sky.sky_material = sky_mat
 
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.34
+	env.ambient_light_energy = 0.36
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.02
+	env.tonemap_exposure = 1.04
 	env.glow_enabled = cfg_high_gfx
-	env.glow_intensity = 0.42
-	env.glow_bloom = 0.14
+	env.glow_intensity = 0.44
+	env.glow_bloom = 0.15
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.04, 0.11, 0.12)
-	env.fog_density = 0.0048
+	env.fog_light_color = Color(0.045, 0.105, 0.125)
+	env.fog_density = 0.0044
 
 	world_env.environment = env
 	add_child(world_env)
 
-	# Warm canopy shaft directional light
-	var sun_key = DirectionalLight3D.new()
-	sun_key.light_color = Color(0.95, 0.86, 0.72)
-	sun_key.light_energy = 0.72
+	sun_key = DirectionalLight3D.new()
+	sun_key.light_color = Color(0.92, 0.96, 0.84)
+	sun_key.light_energy = 0.78
 	sun_key.rotation_degrees = Vector3(-58, 32, 0)
 	sun_key.shadow_enabled = false
 	add_child(sun_key)
 
-	# Cool aqua/violet rim light for depth
-	var sun_rim = DirectionalLight3D.new()
-	sun_rim.light_color = Color(0.45, 0.72, 0.88)
+	sun_rim = DirectionalLight3D.new()
+	sun_rim.light_color = Color(0.58, 0.38, 0.86)
 	sun_rim.light_energy = 0.34
 	sun_rim.rotation_degrees = Vector3(-28, -142, 0)
 	sun_rim.shadow_enabled = false
@@ -787,7 +826,7 @@ func _add_box(pos: Vector3, size: Vector3, mat: Material, rot_deg: Vector3 = Vec
 	map_root.add_child(root)
 	return root
 
-func _add_cyl(pos: Vector3, r: float, h: float, mat: Material, rot_deg: Vector3 = Vector3.ZERO, has_col: bool = false) -> void:
+func _add_cyl(pos: Vector3, r: float, h: float, mat: Material, rot_deg: Vector3 = Vector3.ZERO, has_col: bool = false, top_ratio: float = 0.85) -> void:
 	var root: Node3D = null
 	if has_col:
 		var body = StaticBody3D.new()
@@ -805,7 +844,7 @@ func _add_cyl(pos: Vector3, r: float, h: float, mat: Material, rot_deg: Vector3 
 
 	var mi = MeshInstance3D.new()
 	var cm = CylinderMesh.new()
-	cm.top_radius = r * 0.85
+	cm.top_radius = r * top_ratio
 	cm.bottom_radius = r
 	cm.height = h
 	cm.radial_segments = 14
@@ -838,7 +877,7 @@ func _add_railing(a: Vector3, b: Vector3) -> void:
 
 func _add_wall_reactor(pos: Vector3, glow_mat: Material) -> void:
 	_add_box(pos, Vector3(1.6, 8.2, 1.1), mat_dark_steel, Vector3.ZERO, false)
-	_add_cyl(pos + Vector3(0, 0, 0.35), 0.32, 6.8, glow_mat, Vector3.ZERO, false)
+	_add_cyl(pos + Vector3(0, 0, 0.35), 0.32, 6.8, glow_mat, Vector3.ZERO, false, 1.0)
 	for y_ring in [-2.4, -0.8, 0.8, 2.4]:
 		_add_box(pos + Vector3(0, y_ring, 0.35), Vector3(1.3, 0.24, 0.9), mat_chrome, Vector3.ZERO, false)
 
@@ -894,8 +933,8 @@ func _build_deck17_arena() -> void:
 	for z_beam in [-20.0, -10.0, 0.0, 10.0, 20.0]:
 		_add_box(Vector3(0, 13.4, z_beam), Vector3(48, 1.2, 1.2), mat_dark_steel, Vector3.ZERO, false)
 		_add_box(Vector3(0, 12.75, z_beam), Vector3(26, 0.16, 0.36), mat_glow_orange, Vector3.ZERO, false)
-	_add_cyl(Vector3(-15.5, 12.2, 0), 0.38, 55.0, mat_chrome, Vector3(90, 0, 0), false)
-	_add_cyl(Vector3(15.5, 12.2, 0), 0.38, 55.0, mat_chrome, Vector3(90, 0, 0), false)
+	_add_cyl(Vector3(-15.5, 12.2, 0), 0.38, 55.0, mat_chrome, Vector3(90, 0, 0), false, 1.0)
+	_add_cyl(Vector3(15.5, 12.2, 0), 0.38, 55.0, mat_chrome, Vector3(90, 0, 0), false, 1.0)
 
 	_add_box(Vector3(0, 8.6, -27.85), Vector3(24.0, 0.35, 0.25), mat_glow_cyan, Vector3.ZERO, false)
 	_add_box(Vector3(0, 8.6, 27.85), Vector3(24.0, 0.35, 0.25), mat_glow_red, Vector3.ZERO, false)
@@ -947,22 +986,46 @@ func _build_deck17_arena() -> void:
 	_add_jump_pad(Vector3(13.5, 0.08, -14.5), Vector3(19.0, 6.2, -16.0))
 	_add_jump_pad(Vector3(-13.5, 0.08, 14.5), Vector3(-19.0, 6.2, 16.0))
 
-func _add_tokara_tree(pos: Vector3, trunk_r: float, height: float, glow_mat: Material) -> void:
-	# Main bark trunk + root buttresses
-	_add_cyl(pos + Vector3(0, height * 0.5, 0), trunk_r, height, mat_bark, Vector3.ZERO, true)
-	for b_ang in [0.0, 120.0, 240.0]:
-		var rad_a = deg_to_rad(b_ang)
-		var b_pos = pos + Vector3(cos(rad_a) * trunk_r * 0.75, 1.4, sin(rad_a) * trunk_r * 0.75)
-		_add_box(b_pos, Vector3(trunk_r * 0.55, 2.8, trunk_r * 0.45), mat_bark, Vector3(sin(rad_a) * 14.0, b_ang, -cos(rad_a) * 14.0), false)
+# ==============================================================================
+# DM-TOKARA FOREST — NEXT-GEN 1K PBR ALIEN JUNGLE WITH LIQUID LIFT VATS
+# ==============================================================================
+func _add_tokara_tree(pos: Vector3, trunk_r: float, height: float) -> void:
+	# Multi-segment gnarled trunk with 1K Bark PBR
+	_add_cyl(pos + Vector3(0, height * 0.32, 0), trunk_r * 1.15, height * 0.64, mat_bark, Vector3.ZERO, true, 0.78)
+	_add_cyl(pos + Vector3(0, height * 0.72, 0), trunk_r * 0.85, height * 0.44, mat_bark, Vector3(3.0, 0, -2.5), false, 0.65)
 
-	# Subtle sap vein (toned down so it doesn't look neon-garish)
-	_add_box(pos + Vector3(0, height * 0.42, trunk_r * 0.86), Vector3(trunk_r * 0.16, height * 0.58, 0.10), glow_mat, Vector3.ZERO, false)
+	# Flaring organic root buttresses
+	for b_ang in [0.0, 90.0, 180.0, 270.0]:
+		var rad_a = deg_to_rad(b_ang + 25.0)
+		var b_pos = pos + Vector3(cos(rad_a) * trunk_r * 1.05, 1.35, sin(rad_a) * trunk_r * 1.05)
+		_add_box(b_pos, Vector3(trunk_r * 0.62, 3.2, trunk_r * 0.48), mat_bark, Vector3(sin(rad_a) * 22.0, b_ang, -cos(rad_a) * 22.0), true)
 
-	# Multi-tier organic canopy clusters
-	for layer_i in range(4):
-		var cy = height * (0.72 + float(layer_i) * 0.09)
-		var cr = trunk_r * (3.8 - float(layer_i) * 0.65)
-		_add_cyl(pos + Vector3(0, cy, 0), cr, 2.2, mat_canopy, Vector3(0, layer_i * 42.0, 0), false)
+	# Massive outstretched upper boughs
+	for br_ang in [35.0, 155.0, 275.0]:
+		var ra = deg_to_rad(br_ang)
+		var b_mid = pos + Vector3(cos(ra) * trunk_r * 2.2, height * 0.66, sin(ra) * trunk_r * 2.2)
+		_add_cyl(b_mid, trunk_r * 0.38, trunk_r * 4.2, mat_bark, Vector3(sin(ra) * 62.0, br_ang, -cos(ra) * 62.0), false, 0.55)
+
+	# Layered leafy canopy domes
+	for ci in range(4):
+		var a = deg_to_rad(ci * 90.0 + 20.0)
+		var c_off = Vector3(cos(a) * trunk_r * 1.6, height * (0.78 + float(ci % 2) * 0.08), sin(a) * trunk_r * 1.6)
+		var leaf = MeshInstance3D.new()
+		var sm = SphereMesh.new()
+		sm.radius = trunk_r * 2.4
+		sm.height = trunk_r * 2.1
+		sm.radial_segments = 14
+		sm.rings = 8
+		leaf.mesh = sm
+		leaf.material_override = mat_canopy
+		leaf.position = pos + c_off
+		leaf.scale = Vector3(1.35, 0.55, 1.35)
+		map_root.add_child(leaf)
+
+func _add_rock_formation(pos: Vector3, sz: Vector3, rot_deg: Vector3 = Vector3.ZERO) -> void:
+	_add_box(pos, sz, mat_rock, rot_deg, true)
+	# Mossy cap on top of rock boulders
+	_add_box(pos + Vector3(0, sz.y * 0.48, 0), Vector3(sz.x * 0.94, 0.28, sz.z * 0.94), mat_forest_ground, rot_deg, false)
 
 func _add_bioluminescent_flora(pos: Vector3, is_pink: bool, scale_f: float = 1.0, add_light: bool = true) -> void:
 	var f_mat = mat_flora_pink if is_pink else mat_flora_purple
@@ -972,10 +1035,10 @@ func _add_bioluminescent_flora(pos: Vector3, is_pink: bool, scale_f: float = 1.0
 	map_root.add_child(cluster)
 
 	var offsets = [
-		[Vector3(0, 0.35, 0), 0.10, 0.70, 0.34],
-		[Vector3(0.32, 0.25, 0.18), 0.08, 0.50, 0.24],
-		[Vector3(-0.28, 0.22, -0.22), 0.08, 0.44, 0.22],
-		[Vector3(0.16, 0.18, -0.34), 0.07, 0.36, 0.19]
+		[Vector3(0, 0.0, 0), 0.11, 0.85, 0.40],
+		[Vector3(0.38, 0.0, 0.22), 0.08, 0.58, 0.28],
+		[Vector3(-0.34, 0.0, -0.26), 0.08, 0.50, 0.25],
+		[Vector3(0.20, 0.0, -0.38), 0.07, 0.42, 0.21]
 	]
 	for item in offsets:
 		var ipos: Vector3 = item[0]
@@ -985,8 +1048,8 @@ func _add_bioluminescent_flora(pos: Vector3, is_pink: bool, scale_f: float = 1.0
 
 		var stem = MeshInstance3D.new()
 		var cm = CylinderMesh.new()
-		cm.top_radius = sr * 0.75
-		cm.bottom_radius = sr
+		cm.top_radius = sr * 0.72
+		cm.bottom_radius = sr * 1.15
 		cm.height = sh
 		cm.radial_segments = 8
 		stem.mesh = cm
@@ -997,142 +1060,213 @@ func _add_bioluminescent_flora(pos: Vector3, is_pink: bool, scale_f: float = 1.0
 		var cap = MeshInstance3D.new()
 		var sm = SphereMesh.new()
 		sm.radius = br
-		sm.height = br * 1.15
+		sm.height = br * 1.1
 		sm.radial_segments = 12
 		sm.rings = 8
 		cap.mesh = sm
 		cap.material_override = f_mat
-		cap.position = Vector3(ipos.x, sh + br * 0.25, ipos.z)
-		cap.scale = Vector3(1.15, 0.72, 1.15)
+		cap.position = Vector3(ipos.x, sh + br * 0.2, ipos.z)
+		cap.scale = Vector3(1.22, 0.68, 1.22)
 		cluster.add_child(cap)
 
 	if add_light:
-		var l_col = Color(0.88, 0.32, 0.64) if is_pink else Color(0.56, 0.28, 0.92)
-		_add_point_light(pos + Vector3(0, 1.2, 0), l_col, 1.45 * scale_f, 11.5 * scale_f)
+		var l_col = Color(0.92, 0.34, 0.68) if is_pink else Color(0.58, 0.28, 0.96)
+		_add_point_light(pos + Vector3(0, 1.4, 0), l_col, 1.65 * scale_f, 13.0 * scale_f)
 
 func _add_liquid_jump_vat(pos: Vector3, target_pos: Vector3) -> void:
-	# Raised basin with shimmering lifting fluid that launches players skyward
 	var vat = Node3D.new()
 	vat.position = pos
 	map_root.add_child(vat)
 
-	var rim = MeshInstance3D.new()
-	var tm = TorusMesh.new()
-	tm.inner_radius = 1.45
-	tm.outer_radius = 1.88
-	tm.rings = 18
-	tm.ring_segments = 10
-	rim.mesh = tm
-	rim.material_override = mat_bio_bridge
-	rim.position = Vector3(0, 0.16, 0)
-	vat.add_child(rim)
+	# Sculpted alien stone/metal basin housing the lifting fluid
+	var basin = MeshInstance3D.new()
+	var bcm = CylinderMesh.new()
+	bcm.top_radius = 2.05
+	bcm.bottom_radius = 2.25
+	bcm.height = 0.48
+	bcm.radial_segments = 18
+	basin.mesh = bcm
+	basin.material_override = mat_bio_bridge
+	basin.position = Vector3(0, 0.14, 0)
+	vat.add_child(basin)
 
 	var glow_ring = MeshInstance3D.new()
 	var tm2 = TorusMesh.new()
-	tm2.inner_radius = 1.25
-	tm2.outer_radius = 1.46
+	tm2.inner_radius = 1.45
+	tm2.outer_radius = 1.72
 	tm2.rings = 18
 	tm2.ring_segments = 8
 	glow_ring.mesh = tm2
 	glow_ring.material_override = mat_glow_cyan
-	glow_ring.position = Vector3(0, 0.20, 0)
+	glow_ring.position = Vector3(0, 0.38, 0)
 	vat.add_child(glow_ring)
 
 	var fluid = MeshInstance3D.new()
 	var cm = CylinderMesh.new()
-	cm.top_radius = 1.42
-	cm.bottom_radius = 1.35
+	cm.top_radius = 1.58
+	cm.bottom_radius = 1.50
 	cm.height = 0.26
 	cm.radial_segments = 18
 	fluid.mesh = cm
 	fluid.material_override = mat_liquid_vat
-	fluid.position = Vector3(0, 0.12, 0)
+	fluid.position = Vector3(0, 0.30, 0)
 	vat.add_child(fluid)
 
-	# Upward-biased velocity so stepping into the liquid vat propels you high into the air
+	# Soft rising mist/droplet particles above the liquid vat
+	var mist = CPUParticles3D.new()
+	var spm = SphereMesh.new()
+	spm.radius = 0.08
+	spm.height = 0.16
+	spm.radial_segments = 6
+	spm.rings = 4
+	mist.mesh = spm
+	mist.material_override = mat_glow_cyan
+	mist.amount = 14
+	mist.lifetime = 1.4
+	mist.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+	mist.emission_ring_radius = 1.25
+	mist.emission_ring_inner_radius = 0.3
+	mist.emission_ring_height = 0.1
+	mist.direction = Vector3(0, 1, 0)
+	mist.spread = 12.0
+	mist.gravity = Vector3(0, 0.6, 0)
+	mist.initial_velocity_min = 2.4
+	mist.initial_velocity_max = 4.5
+	mist.position = Vector3(0, 0.45, 0)
+	vat.add_child(mist)
+
 	var vel = (target_pos - pos)
 	vel.y = 0.0
-	var horiz = vel.normalized() * 8.5
-	var launch_vel = Vector3(horiz.x, 18.2, horiz.z)
+	var horiz = vel.normalized() * 8.8
+	var launch_vel = Vector3(horiz.x, 18.4, horiz.z)
 	jump_pads.append({"pos": pos, "vel": launch_vel, "ring": glow_ring})
-	_add_point_light(pos + Vector3(0, 1.4, 0), Color(0.20, 0.84, 0.78), 2.3, 15.0)
+	_add_point_light(pos + Vector3(0, 1.8, 0), Color(0.20, 0.88, 0.82), 2.8, 18.0)
+
+func _add_canopy_light_shaft(pos: Vector3) -> void:
+	var mi = MeshInstance3D.new()
+	var cm = CylinderMesh.new()
+	cm.top_radius = 1.8
+	cm.bottom_radius = 5.4
+	cm.height = 28.0
+	cm.radial_segments = 12
+	mi.mesh = cm
+	mi.material_override = mat_light_shaft
+	mi.position = pos + Vector3(0, 13.0, 0)
+	mi.rotation_degrees = Vector3(14.0, 0.0, -10.0)
+	map_root.add_child(mi)
 
 func _build_tokara_forest_arena() -> void:
-	# ~2.5x larger forest clearing: X in [-56, 56], Z in [-56, 56]
+	# Mossy jungle floor (1K Moss PBR)
 	_add_box(Vector3(0, -0.5, 0), Vector3(114, 1.0, 114), mat_forest_ground, Vector3.ZERO, true)
-	_add_box(Vector3(0, 12.0, -57.5), Vector3(116, 25.0, 2.0), mat_bark, Vector3.ZERO, true)
-	_add_box(Vector3(0, 12.0, 57.5), Vector3(116, 25.0, 2.0), mat_bark, Vector3.ZERO, true)
-	_add_box(Vector3(-57.5, 12.0, 0), Vector3(2.0, 25.0, 116), mat_bark, Vector3.ZERO, true)
-	_add_box(Vector3(57.5, 12.0, 0), Vector3(2.0, 25.0, 116), mat_bark, Vector3.ZERO, true)
 
-	# Elevated bio-catwalks (Y = 7.5 and Y = 14.0)
-	_add_box(Vector3(0, 7.25, -24.0), Vector3(72.0, 0.5, 6.0), mat_bio_bridge, Vector3.ZERO, true)
-	_add_box(Vector3(0, 7.25, 24.0), Vector3(72.0, 0.5, 6.0), mat_bio_bridge, Vector3.ZERO, true)
-	_add_box(Vector3(-26.0, 7.25, 0), Vector3(6.0, 0.5, 54.0), mat_bio_bridge, Vector3.ZERO, true)
-	_add_box(Vector3(26.0, 7.25, 0), Vector3(6.0, 0.5, 54.0), mat_bio_bridge, Vector3.ZERO, true)
-	_add_box(Vector3(0, 13.8, 0), Vector3(54.0, 0.5, 5.5), mat_bio_bridge, Vector3.ZERO, true)
-	_add_box(Vector3(0, 14.08, 0), Vector3(52.0, 0.12, 0.30), mat_glow_green, Vector3.ZERO, false)
+	# Perimeter canyon cliffs (1K Rock PBR)
+	_add_box(Vector3(0, 12.5, -57.5), Vector3(116, 26.0, 3.0), mat_rock, Vector3.ZERO, true)
+	_add_box(Vector3(0, 12.5, 57.5), Vector3(116, 26.0, 3.0), mat_rock, Vector3.ZERO, true)
+	_add_box(Vector3(-57.5, 12.5, 0), Vector3(3.0, 26.0, 116), mat_rock, Vector3.ZERO, true)
+	_add_box(Vector3(57.5, 12.5, 0), Vector3(3.0, 26.0, 116), mat_rock, Vector3.ZERO, true)
 
-	_add_box(Vector3(0, 7.52, -21.1), Vector3(70.0, 0.10, 0.22), mat_glow_cyan, Vector3.ZERO, false)
-	_add_box(Vector3(0, 7.52, 21.1), Vector3(70.0, 0.10, 0.22), mat_glow_red, Vector3.ZERO, false)
+	# Stepped rocky canyon ledges & mossy outcrops for organic silhouette
+	_add_rock_formation(Vector3(-46, 3.2, -46), Vector3(18, 6.4, 18), Vector3(0, 15, 0))
+	_add_rock_formation(Vector3(46, 3.2, -46), Vector3(18, 6.4, 18), Vector3(0, -20, 0))
+	_add_rock_formation(Vector3(-46, 3.2, 46), Vector3(18, 6.4, 18), Vector3(0, 22, 0))
+	_add_rock_formation(Vector3(46, 3.2, 46), Vector3(18, 6.4, 18), Vector3(0, -14, 0))
 
-	# Giant Tokara trees framing the clearing & supporting walkways
+	# Elevated bio-tech forest catwalks (1K Bio Metal PBR, Y = 7.5 & Y = 14.0)
+	_add_box(Vector3(0, 7.25, -24.0), Vector3(72.0, 0.55, 6.2), mat_bio_bridge, Vector3.ZERO, true)
+	_add_box(Vector3(0, 7.25, 24.0), Vector3(72.0, 0.55, 6.2), mat_bio_bridge, Vector3.ZERO, true)
+	_add_box(Vector3(-26.0, 7.25, 0), Vector3(6.2, 0.55, 54.0), mat_bio_bridge, Vector3.ZERO, true)
+	_add_box(Vector3(26.0, 7.25, 0), Vector3(6.2, 0.55, 54.0), mat_bio_bridge, Vector3.ZERO, true)
+	_add_box(Vector3(0, 13.8, 0), Vector3(54.0, 0.55, 5.8), mat_bio_bridge, Vector3.ZERO, true)
+
+	# Subtle catwalk edge trim & safety rails
+	_add_box(Vector3(0, 7.54, -21.0), Vector3(70.0, 0.10, 0.20), mat_glow_cyan, Vector3.ZERO, false)
+	_add_box(Vector3(0, 7.54, 21.0), Vector3(70.0, 0.10, 0.20), mat_glow_red, Vector3.ZERO, false)
+	_add_box(Vector3(0, 14.10, 0), Vector3(52.0, 0.10, 0.26), mat_glow_purple, Vector3.ZERO, false)
+
+	# Gentle mossy rock ramps connecting ground to mid-level flanks
+	_add_box(Vector3(-34.0, 3.6, -10.0), Vector3(5.2, 0.6, 20.0), mat_bio_bridge, Vector3(21.5, 0, 0), true)
+	_add_box(Vector3(34.0, 3.6, 10.0), Vector3(5.2, 0.6, 20.0), mat_bio_bridge, Vector3(-21.5, 0, 0), true)
+
+	# Giant Tokara ancient trees with 1K Bark PBR
 	var tree_specs = [
-		[Vector3(-22, 0, -22), 2.4, 24.0, mat_glow_cyan],
-		[Vector3(22, 0, -22), 2.4, 24.0, mat_glow_cyan],
-		[Vector3(-22, 0, 22), 2.4, 24.0, mat_glow_red],
-		[Vector3(22, 0, 22), 2.4, 24.0, mat_glow_red],
-		[Vector3(-42, 0, -38), 3.1, 28.0, mat_glow_green],
-		[Vector3(42, 0, -38), 3.1, 28.0, mat_glow_green],
-		[Vector3(-42, 0, 38), 3.1, 28.0, mat_glow_orange],
-		[Vector3(42, 0, 38), 3.1, 28.0, mat_glow_orange],
-		[Vector3(0, 0, -44), 2.8, 26.0, mat_glow_cyan],
-		[Vector3(0, 0, 44), 2.8, 26.0, mat_glow_red]
+		[Vector3(-22, 0, -22), 2.5, 26.0],
+		[Vector3(22, 0, -22), 2.5, 26.0],
+		[Vector3(-22, 0, 22), 2.5, 26.0],
+		[Vector3(22, 0, 22), 2.5, 26.0],
+		[Vector3(-42, 0, -34), 3.2, 30.0],
+		[Vector3(42, 0, -34), 3.2, 30.0],
+		[Vector3(-42, 0, 34), 3.2, 30.0],
+		[Vector3(42, 0, 34), 3.2, 30.0],
+		[Vector3(0, 0, -45), 2.9, 28.0],
+		[Vector3(0, 0, 45), 2.9, 28.0]
 	]
 	for ts in tree_specs:
-		_add_tokara_tree(ts[0], ts[1], ts[2], ts[3])
+		_add_tokara_tree(ts[0], ts[1], ts[2])
 
-	# Pink & purple bioluminescent plants along clearings, trunks & catwalks
+	# Canopy god-rays piercing down into the clearing
+	_add_canopy_light_shaft(Vector3(0, 0, 0))
+	_add_canopy_light_shaft(Vector3(-18, 0, -16))
+	_add_canopy_light_shaft(Vector3(18, 0, 16))
+
+	# Floating ambient bioluminescent jungle spores
+	var spores = CPUParticles3D.new()
+	var sbm = BoxMesh.new()
+	sbm.size = Vector3(0.09, 0.09, 0.09)
+	spores.mesh = sbm
+	spores.material_override = mat_flora_pink
+	spores.amount = 75
+	spores.lifetime = 6.5
+	spores.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	spores.emission_box_extents = Vector3(44.0, 12.0, 44.0)
+	spores.direction = Vector3(0, 1, 0)
+	spores.spread = 45.0
+	spores.gravity = Vector3(0, 0.08, 0)
+	spores.initial_velocity_min = 0.25
+	spores.initial_velocity_max = 0.75
+	spores.position = Vector3(0, 6.0, 0)
+	map_root.add_child(spores)
+
+	# Pink & purple bioluminescent flora clusters with soft point lighting
 	var flora_spots = [
-		[Vector3(-8.5, 0.0, -7.5), true, 1.25, true],
-		[Vector3(8.5, 0.0, -7.5), false, 1.30, true],
-		[Vector3(-8.5, 0.0, 7.5), false, 1.20, true],
-		[Vector3(8.5, 0.0, 7.5), true, 1.25, true],
-		[Vector3(-19.0, 0.0, -14.0), true, 1.45, true],
-		[Vector3(19.0, 0.0, -14.0), false, 1.45, true],
-		[Vector3(-19.0, 0.0, 14.0), false, 1.45, true],
-		[Vector3(19.0, 0.0, 14.0), true, 1.45, true],
-		[Vector3(-34.0, 0.0, -24.0), true, 1.35, false],
-		[Vector3(34.0, 0.0, -24.0), false, 1.35, false],
-		[Vector3(-34.0, 0.0, 24.0), false, 1.35, false],
-		[Vector3(34.0, 0.0, 24.0), true, 1.35, false],
-		[Vector3(-14.0, 7.5, -24.0), true, 0.95, false],
-		[Vector3(14.0, 7.5, -24.0), false, 0.95, false],
-		[Vector3(-14.0, 7.5, 24.0), false, 0.95, false],
-		[Vector3(14.0, 7.5, 24.0), true, 0.95, false],
-		[Vector3(-12.0, 14.05, 0.0), true, 0.90, false],
-		[Vector3(12.0, 14.05, 0.0), false, 0.90, false]
+		[Vector3(-8.5, 0.0, -7.5), true, 1.30, true],
+		[Vector3(8.5, 0.0, -7.5), false, 1.35, true],
+		[Vector3(-8.5, 0.0, 7.5), false, 1.25, true],
+		[Vector3(8.5, 0.0, 7.5), true, 1.30, true],
+		[Vector3(-19.0, 0.0, -13.0), true, 1.45, true],
+		[Vector3(19.0, 0.0, -13.0), false, 1.45, true],
+		[Vector3(-19.0, 0.0, 13.0), false, 1.45, true],
+		[Vector3(19.0, 0.0, 13.0), true, 1.45, true],
+		[Vector3(-34.0, 0.0, -24.0), true, 1.40, false],
+		[Vector3(34.0, 0.0, -24.0), false, 1.40, false],
+		[Vector3(-34.0, 0.0, 24.0), false, 1.40, false],
+		[Vector3(34.0, 0.0, 24.0), true, 1.40, false],
+		[Vector3(-14.0, 7.52, -24.0), true, 1.0, false],
+		[Vector3(14.0, 7.52, -24.0), false, 1.0, false],
+		[Vector3(-14.0, 7.52, 24.0), false, 1.0, false],
+		[Vector3(14.0, 7.52, 24.0), true, 1.0, false],
+		[Vector3(-12.0, 14.08, 0.0), true, 0.95, false],
+		[Vector3(12.0, 14.08, 0.0), false, 0.95, false]
 	]
 	for fl in flora_spots:
 		_add_bioluminescent_flora(fl[0], fl[1], fl[2], fl[3])
 
-	# Ruins & cover blocks across the forest floor
-	_add_scifi_crate(Vector3(0, 1.3, 0), Vector3(6.5, 2.6, 6.5), mat_glow_green)
-	_add_scifi_crate(Vector3(-14, 1.1, -12), Vector3(4.5, 2.2, 2.2), mat_glow_cyan)
-	_add_scifi_crate(Vector3(14, 1.1, 12), Vector3(4.5, 2.2, 2.2), mat_glow_red)
-	_add_scifi_crate(Vector3(-34, 1.2, 8), Vector3(5.0, 2.4, 2.6), mat_glow_green)
-	_add_scifi_crate(Vector3(34, 1.2, -8), Vector3(5.0, 2.4, 2.6), mat_glow_green)
+	# Mossy rock boulders & alien tech cover across the forest floor
+	_add_rock_formation(Vector3(0, 1.4, 0), Vector3(6.8, 2.8, 6.8), Vector3(0, 18, 0))
+	_add_rock_formation(Vector3(-14, 1.1, -11), Vector3(4.8, 2.2, 2.6), Vector3(0, -12, 0))
+	_add_rock_formation(Vector3(14, 1.1, 11), Vector3(4.8, 2.2, 2.6), Vector3(0, 12, 0))
+	_add_scifi_crate(Vector3(-34, 1.2, 8), Vector3(5.0, 2.4, 2.6), mat_glow_cyan)
+	_add_scifi_crate(Vector3(34, 1.2, -8), Vector3(5.0, 2.4, 2.6), mat_glow_red)
 
-	# Lifting liquid vats launching players high into the canopy & walkways
-	_add_liquid_jump_vat(Vector3(-13.0, 0.05, -16.0), Vector3(-22.0, 14.0, -22.0))
-	_add_liquid_jump_vat(Vector3(13.0, 0.05, 16.0), Vector3(22.0, 14.0, 22.0))
-	_add_liquid_jump_vat(Vector3(0.0, 7.52, -24.0), Vector3(0.0, 18.0, -8.0))
-	_add_liquid_jump_vat(Vector3(0.0, 7.52, 24.0), Vector3(0.0, 18.0, 8.0))
+	# Glowing Liquid Lift Vats (signature Tokara vertical launchers + light sources)
+	_add_liquid_jump_vat(Vector3(-13.0, 0.02, -16.5), Vector3(-22.0, 15.0, -22.0))
+	_add_liquid_jump_vat(Vector3(13.0, 0.02, 16.5), Vector3(22.0, 15.0, 22.0))
+	_add_liquid_jump_vat(Vector3(0.0, 7.52, -24.0), Vector3(0.0, 19.0, -7.0))
+	_add_liquid_jump_vat(Vector3(0.0, 7.52, 24.0), Vector3(0.0, 19.0, 7.0))
 
-	# Balanced atmospheric lights for Tokara Forest
-	_add_point_light(Vector3(0, 5.5, 0), Color(0.24, 0.85, 0.65), 2.8, 38.0)
-	_add_point_light(Vector3(-26, 8.5, -24), Color(0.24, 0.78, 0.88), 2.4, 34.0)
-	_add_point_light(Vector3(26, 8.5, 24), Color(0.92, 0.36, 0.26), 2.4, 34.0)
+	# Atmospheric key pools of light
+	_add_point_light(Vector3(0, 6.0, 0), Color(0.24, 0.86, 0.72), 2.8, 38.0)
+	_add_point_light(Vector3(-26, 9.0, -24), Color(0.22, 0.78, 0.92), 2.5, 34.0)
+	_add_point_light(Vector3(26, 9.0, 24), Color(0.92, 0.34, 0.28), 2.5, 34.0)
 
 func _add_jump_pad(pos: Vector3, target_pos: Vector3) -> void:
 	var pad = Node3D.new()
@@ -1314,13 +1448,13 @@ func _process(delta: float) -> void:
 		orbital_station.rotation.y += delta * 0.08
 
 	if game_state == STATE_MENU or game_state == STATE_MATCH_OVER:
-		menu_orbit_angle += delta * 0.20
-		var rad = 34.0 if cfg_map == MAP_TOKARA else 17.5
-		var hgt = 16.0 if cfg_map == MAP_TOKARA else 9.2
+		menu_orbit_angle += delta * 0.18
+		var rad = 32.0 if cfg_map == MAP_TOKARA else 17.5
+		var hgt = 14.5 if cfg_map == MAP_TOKARA else 9.2
 		var rx = sin(menu_orbit_angle) * rad
 		var rz = cos(menu_orbit_angle) * rad
 		menu_cam.position = Vector3(rx, hgt + sin(menu_orbit_angle * 1.7) * 1.5, rz)
-		menu_cam.look_at(Vector3(0, 4.0 if cfg_map == MAP_TOKARA else 2.2, 0), Vector3.UP)
+		menu_cam.look_at(Vector3(0, 4.5 if cfg_map == MAP_TOKARA else 2.2, 0), Vector3.UP)
 
 	if game_state == STATE_PLAYING:
 		match_time = max(0.0, match_time - delta)
@@ -1335,8 +1469,9 @@ func _process(delta: float) -> void:
 	var ticks = Time.get_ticks_msec() * 0.004
 	for jp in jump_pads:
 		var r: Node3D = jp["ring"]
-		r.rotation.y += delta * 2.4
-		r.position.y = 0.16 + sin(ticks * 1.5) * 0.05
+		r.rotation.y += delta * 2.2
+		var base_y = 0.38 if cfg_map == MAP_TOKARA else 0.16
+		r.position.y = base_y + sin(ticks * 1.5) * 0.05
 
 	for p in pickups:
 		var item: Node3D = p["node"]
@@ -1430,10 +1565,10 @@ func _check_acid_damage() -> void:
 
 func check_jump_pads(actor: CharacterBody3D) -> bool:
 	for jp in jump_pads:
-		if actor.global_position.distance_to(jp["pos"]) < 1.95 and actor.velocity.y < 14.0:
+		if actor.global_position.distance_to(jp["pos"]) < 2.15 and actor.velocity.y < 14.0:
 			actor.velocity = jp["vel"]
 			if actor == player:
-				sfx.play_sfx("jump_pad")
+				sfx.play_sfx("vat_lift" if cfg_map == MAP_TOKARA else "jump_pad")
 			return true
 	return false
 
@@ -1536,11 +1671,13 @@ func spawn_shock_core(pos: Vector3, vel: Vector3, attacker) -> void:
 	shock_cores.append(sc)
 
 # ==============================================================================
-# PUNCHY MULTI-LAYER AUDIO
+# FILTERED DSP AUDIO ENGINE (Loads all pre-rendered WAVs from .build-apk.yml)
 # ==============================================================================
 class UTSoundBank extends Node:
 	var bank: Dictionary = {}
 	var announcer_bank: Dictionary = {}
+	var bgm_tokara: AudioStream = null
+	var bgm_deck17: AudioStream = null
 	var players: Array = []
 	var next_idx: int = 0
 	var announcer_player: AudioStreamPlayer = null
@@ -1548,9 +1685,9 @@ class UTSoundBank extends Node:
 	var music_enabled: bool = true
 
 	func _ready() -> void:
-		for i in range(8):
+		for i in range(10):
 			var p = AudioStreamPlayer.new()
-			p.volume_db = -4.0
+			p.volume_db = -3.5
 			add_child(p)
 			players.append(p)
 
@@ -1559,13 +1696,16 @@ class UTSoundBank extends Node:
 		add_child(announcer_player)
 
 		bgm_player = AudioStreamPlayer.new()
-		bgm_player.volume_db = -12.5
+		bgm_player.volume_db = -11.0
 		bgm_player.finished.connect(_on_bgm_finished)
 		add_child(bgm_player)
 
-		var bgm_res = _load_wav("res://assets/audio/bgm_arena.wav")
-		if bgm_res != null:
-			bgm_player.stream = bgm_res
+		bgm_tokara = _load_wav("res://assets/audio/bgm_tokara.wav")
+		bgm_deck17 = _load_wav("res://assets/audio/bgm_deck17.wav")
+		if bgm_deck17 == null:
+			bgm_deck17 = _load_wav("res://assets/audio/bgm_arena.wav")
+		if bgm_tokara == null:
+			bgm_tokara = bgm_deck17
 
 		var ann_keys = [
 			"ann_play", "ann_firstblood", "ann_double", "ann_multi",
@@ -1577,167 +1717,49 @@ class UTSoundBank extends Node:
 			if res != null:
 				announcer_bank[k] = res
 
-		bank["shock_fire"] = _build_shock_sfx()
-		bank["shock_combo"] = _build_combo_sfx()
-		bank["flak_fire"] = _build_flak_sfx()
-		bank["rocket_fire"] = _build_rocket_sfx()
-		bank["link_fire"] = _build_link_sfx()
-		bank["explosion"] = _build_explosion_sfx()
-		bank["hit"] = _gen_tone(0.06, 1780.0, 1280.0, 0.08, 0.85)
-		bank["jump_pad"] = _gen_tone(0.32, 220.0, 1180.0, 0.14, 0.88)
-		bank["dodge"] = _gen_tone(0.16, 360.0, 120.0, 0.48, 0.72)
-		bank["pickup"] = _gen_tone(0.24, 580.0, 1220.0, 0.04, 0.80)
-		bank["step"] = _build_step_sfx()
+		# Load all filtered DSP weapon & surface WAVs built by Python in CI
+		bank["shock_fire"] = _load_or_fallback("res://assets/audio/sfx_shock.wav", 0.28, 1300.0, 180.0, 0.25)
+		bank["shock_combo"] = _load_or_fallback("res://assets/audio/sfx_combo.wav", 0.72, 480.0, 32.0, 0.65)
+		bank["flak_fire"] = _load_or_fallback("res://assets/audio/sfx_flak.wav", 0.34, 240.0, 48.0, 0.88)
+		bank["rocket_fire"] = _load_or_fallback("res://assets/audio/sfx_rocket.wav", 0.45, 220.0, 42.0, 0.76)
+		bank["rocket_fly"] = _load_wav("res://assets/audio/sfx_rocket_fly.wav")
+		bank["link_fire"] = _load_or_fallback("res://assets/audio/sfx_link.wav", 0.12, 740.0, 260.0, 0.20)
+		bank["explosion"] = _load_or_fallback("res://assets/audio/sfx_boom.wav", 0.68, 120.0, 24.0, 0.92)
+		bank["step_forest"] = _load_or_fallback("res://assets/audio/sfx_step_forest.wav", 0.08, 160.0, 60.0, 0.75)
+		bank["step_metal"] = _load_or_fallback("res://assets/audio/sfx_step_metal.wav", 0.08, 260.0, 75.0, 0.65)
+		bank["vat_lift"] = _load_or_fallback("res://assets/audio/sfx_vat_lift.wav", 0.45, 220.0, 820.0, 0.35)
+		bank["jump_pad"] = bank["vat_lift"]
+		bank["hit"] = _gen_tone(0.055, 1720.0, 1240.0, 0.08, 0.82)
+		bank["dodge"] = _gen_tone(0.15, 340.0, 115.0, 0.48, 0.68)
+		bank["pickup"] = _gen_tone(0.22, 540.0, 1160.0, 0.04, 0.78)
 
-	func _build_rocket_sfx() -> AudioStreamWAV:
-		var rate = 22050
-		var dur = 0.42
-		var n = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(n)
-		var rng = RandomNumberGenerator.new()
-		rng.seed = 200499
-		var spin_ph = 0.0
-		var sub_ph = 0.0
-		for i in range(n):
-			var t = float(i) / float(n)
-			var s = 0.0
-			if t < 0.28:
-				var u = t / 0.28
-				spin_ph += TAU * lerp(260.0, 980.0, u * u) / float(rate)
-				s += sin(spin_ph) * 0.35 * u
-			else:
-				var u2 = (t - 0.28) / 0.72
-				sub_ph += TAU * lerp(130.0, 42.0, u2) / float(rate)
-				var env = pow(1.0 - u2, 1.45)
-				var nz = rng.randf_range(-1.0, 1.0)
-				s += (nz * 0.75 + sin(sub_ph) * 0.65) * env * 0.95
-			buf[i] = s
-		return _finalize_wav(buf, rate, 85)
+	func get_stream(key: String) -> AudioStream:
+		return bank.get(key, null)
 
-	func _build_explosion_sfx() -> AudioStreamWAV:
-		var rate = 22050
-		var dur = 0.62
-		var n = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(n)
-		var rng = RandomNumberGenerator.new()
-		rng.seed = 200477
-		var sub_ph = 0.0
-		for i in range(n):
-			var t = float(i) / float(n)
-			sub_ph += TAU * lerp(110.0, 26.0, pow(t, 0.75)) / float(rate)
-			var env = pow(1.0 - t, 1.35)
-			var crack = rng.randf_range(-1.0, 1.0) * pow(max(0.0, 1.0 - t * 4.0), 1.8)
-			var rumble = rng.randf_range(-1.0, 1.0) * 0.72 + sin(sub_ph) * 0.85
-			buf[i] = (crack * 0.9 + rumble * env) * 1.1
-		return _finalize_wav(buf, rate, 130)
+	func set_map_bgm(map_id: int) -> void:
+		if bgm_player == null:
+			return
+		var target_stream = bgm_tokara if map_id == 1 else bgm_deck17
+		if target_stream == null:
+			return
+		if bgm_player.stream != target_stream:
+			bgm_player.stream = target_stream
+			if music_enabled:
+				bgm_player.play()
 
-	func _build_shock_sfx() -> AudioStreamWAV:
-		var rate = 22050
-		var dur = 0.28
-		var n = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(n)
-		var rng = RandomNumberGenerator.new()
-		rng.seed = 200411
-		var ph = 0.0
-		for i in range(n):
-			var t = float(i) / float(n)
-			ph += TAU * lerp(1450.0, 160.0, pow(t, 0.6)) / float(rate)
-			var env = pow(1.0 - t, 1.5)
-			buf[i] = (sin(ph) * 0.75 + rng.randf_range(-1.0, 1.0) * 0.35) * env * 0.95
-		return _finalize_wav(buf, rate, 70)
+	func set_music_enabled(en: bool) -> void:
+		music_enabled = en
+		if bgm_player == null or bgm_player.stream == null:
+			return
+		if en:
+			if not bgm_player.playing:
+				bgm_player.play()
+		else:
+			bgm_player.stop()
 
-	func _build_combo_sfx() -> AudioStreamWAV:
-		var rate = 22050
-		var dur = 0.72
-		var n = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(n)
-		var rng = RandomNumberGenerator.new()
-		rng.seed = 200422
-		var ph = 0.0
-		var sub = 0.0
-		for i in range(n):
-			var t = float(i) / float(n)
-			ph += TAU * lerp(920.0, 65.0, pow(t, 0.55)) / float(rate)
-			sub += TAU * lerp(95.0, 32.0, t) / float(rate)
-			var env = pow(1.0 - t, 1.25)
-			buf[i] = (sin(ph) * 0.55 + sin(sub) * 0.85 + rng.randf_range(-1.0, 1.0) * 0.65) * env * 1.15
-		return _finalize_wav(buf, rate, 140)
-
-	func _build_flak_sfx() -> AudioStreamWAV:
-		var rate = 22050
-		var dur = 0.34
-		var n = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(n)
-		var rng = RandomNumberGenerator.new()
-		rng.seed = 200433
-		var punch = 0.0
-		for i in range(n):
-			var t = float(i) / float(n)
-			punch += TAU * lerp(240.0, 48.0, t) / float(rate)
-			var env = pow(1.0 - t, 1.7)
-			buf[i] = (rng.randf_range(-1.0, 1.0) * 0.92 + sin(punch) * 0.75) * env * 1.05
-		return _finalize_wav(buf, rate, 80)
-
-	func _build_link_sfx() -> AudioStreamWAV:
-		var rate = 22050
-		var dur = 0.12
-		var n = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(n)
-		var ph = 0.0
-		for i in range(n):
-			var t = float(i) / float(n)
-			ph += TAU * lerp(840.0, 340.0, t) / float(rate)
-			buf[i] = sin(ph) * pow(1.0 - t, 1.4) * 0.75
-		return _finalize_wav(buf, rate, 45)
-
-	func _build_step_sfx() -> AudioStreamWAV:
-		var rate = 22050
-		var dur = 0.075
-		var n = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(n)
-		var rng = RandomNumberGenerator.new()
-		rng.seed = 200455
-		var thud = 0.0
-		for i in range(n):
-			var t = float(i) / float(n)
-			thud += TAU * lerp(155.0, 52.0, t) / float(rate)
-			var env = pow(1.0 - t, 2.2)
-			buf[i] = (sin(thud) * 0.8 + rng.randf_range(-1.0, 1.0) * 0.45) * env * 0.65
-		return _finalize_wav(buf, rate, 0)
-
-	func _finalize_wav(buf: PackedFloat32Array, rate: int, echo_ms: int) -> AudioStreamWAV:
-		var n = buf.size()
-		var out: PackedFloat32Array = PackedFloat32Array()
-		out.resize(n)
-		var d = int(float(rate) * float(echo_ms) / 1000.0)
-		var peak = 0.001
-		for i in range(n):
-			var v = buf[i]
-			if d > 0 and i >= d:
-				v += buf[i - d] * 0.28
-			out[i] = v
-			var av = abs(v)
-			if av > peak:
-				peak = av
-		var gain = 0.92 / peak
-		var data = PackedByteArray()
-		data.resize(n * 2)
-		for i in range(n):
-			var s = clamp(tanh(out[i] * gain * 1.25) * 31500.0, -32767.0, 32767.0)
-			data.encode_s16(i * 2, int(s))
-		var wav = AudioStreamWAV.new()
-		wav.format = AudioStreamWAV.FORMAT_16_BITS
-		wav.mix_rate = rate
-		wav.stereo = false
-		wav.data = data
-		return wav
+	func _on_bgm_finished() -> void:
+		if music_enabled and bgm_player != null and bgm_player.stream != null:
+			bgm_player.play()
 
 	func _load_wav(path: String) -> AudioStream:
 		if ResourceLoader.exists(path):
@@ -1757,19 +1779,11 @@ class UTSoundBank extends Node:
 					return wav
 		return null
 
-	func set_music_enabled(en: bool) -> void:
-		music_enabled = en
-		if bgm_player == null or bgm_player.stream == null:
-			return
-		if en:
-			if not bgm_player.playing:
-				bgm_player.play()
-		else:
-			bgm_player.stop()
-
-	func _on_bgm_finished() -> void:
-		if music_enabled and bgm_player != null and bgm_player.stream != null:
-			bgm_player.play()
+	func _load_or_fallback(path: String, dur: float, f0: float, f1: float, nz: float) -> AudioStream:
+		var loaded = _load_wav(path)
+		if loaded != null:
+			return loaded
+		return _gen_tone(dur, f0, f1, nz, 0.85)
 
 	func play_announcer(key: String) -> void:
 		if announcer_bank.has(key):
@@ -1781,8 +1795,8 @@ class UTSoundBank extends Node:
 	func _gen_tone(dur: float, f0: float, f1: float, noise_mix: float, amp: float) -> AudioStreamWAV:
 		var rate = 22050
 		var count = int(dur * rate)
-		var buf: PackedFloat32Array = PackedFloat32Array()
-		buf.resize(count)
+		var data = PackedByteArray()
+		data.resize(count * 2)
 		var phase = 0.0
 		var rng = RandomNumberGenerator.new()
 		rng.seed = int(f0 * 100.0 + dur * 1000.0)
@@ -1790,23 +1804,31 @@ class UTSoundBank extends Node:
 			var t = float(i) / float(count)
 			var freq = lerp(f0, f1, t)
 			phase += TAU * freq / float(rate)
-			var env = pow(1.0 - t, 1.55)
+			var env = pow(1.0 - t, 1.6)
 			var tone = sin(phase)
 			var nz = rng.randf_range(-1.0, 1.0)
-			buf[i] = (tone * (1.0 - noise_mix) + nz * noise_mix) * env * amp
-		return _finalize_wav(buf, rate, 0)
+			var s = (tone * (1.0 - noise_mix) + nz * noise_mix) * env * amp
+			var iv = int(clamp(s * 30500.0, -32767.0, 32767.0))
+			data.encode_s16(i * 2, iv)
+		var wav = AudioStreamWAV.new()
+		wav.format = AudioStreamWAV.FORMAT_16_BITS
+		wav.mix_rate = rate
+		wav.stereo = false
+		wav.data = data
+		return wav
 
-	func play_sfx(key: String) -> void:
-		if not bank.has(key):
+	func play_sfx(key: String, vol_offset_db: float = 0.0) -> void:
+		if not bank.has(key) or bank[key] == null:
 			return
 		var p: AudioStreamPlayer = players[next_idx]
 		next_idx = (next_idx + 1) % players.size()
 		p.stream = bank[key]
+		p.volume_db = -3.5 + vol_offset_db
 		p.pitch_scale = randf_range(0.95, 1.05)
 		p.play()
 
 # ==============================================================================
-# PLAYER CONTROLLER
+# PLAYER CONTROLLER (Surface-Aware Footsteps + Sculpted Weapons + Low-G Air Ctrl)
 # ==============================================================================
 class UTPlayer extends CharacterBody3D:
 	var arena: Node3D = null
@@ -1839,6 +1861,7 @@ class UTPlayer extends CharacterBody3D:
 	var shake_intensity: float = 0.0
 	var bob_t: float = 0.0
 	var step_accum: float = 0.0
+	var was_in_air: bool = false
 
 	var jumps_used: int = 0
 	var dodge_cd: float = 0.0
@@ -1867,7 +1890,7 @@ class UTPlayer extends CharacterBody3D:
 		cam = Camera3D.new()
 		cam.position = Vector3(0, 1.56, 0)
 		cam.fov = 88.0
-		cam.far = 260.0
+		cam.far = 280.0
 		add_child(cam)
 
 		weapon_pivot = Node3D.new()
@@ -1875,7 +1898,7 @@ class UTPlayer extends CharacterBody3D:
 		cam.add_child(weapon_pivot)
 
 		muzzle_group = Node3D.new()
-		muzzle_group.position = Vector3(0, 0.02, -0.66)
+		muzzle_group.position = Vector3(0, 0.02, -0.68)
 		muzzle_group.visible = false
 		weapon_pivot.add_child(muzzle_group)
 
@@ -1886,8 +1909,8 @@ class UTPlayer extends CharacterBody3D:
 		var cone_m = MeshInstance3D.new()
 		var cm = CylinderMesh.new()
 		cm.top_radius = 0.01
-		cm.bottom_radius = 0.14
-		cm.height = 0.36
+		cm.bottom_radius = 0.13
+		cm.height = 0.34
 		cm.radial_segments = 8
 		cone_m.mesh = cm
 		cone_m.material_override = muzzle_mat
@@ -1897,8 +1920,8 @@ class UTPlayer extends CharacterBody3D:
 
 		var core_m = MeshInstance3D.new()
 		var sm = SphereMesh.new()
-		sm.radius = 0.10
-		sm.height = 0.20
+		sm.radius = 0.09
+		sm.height = 0.18
 		sm.radial_segments = 8
 		sm.rings = 6
 		core_m.mesh = sm
@@ -1908,17 +1931,23 @@ class UTPlayer extends CharacterBody3D:
 		_build_sculpted_weapons()
 		select_weapon(0)
 
+	func _play_surface_step(vol_db: float = -4.0) -> void:
+		if arena.cfg_map == 1 and global_position.y < 4.5:
+			arena.sfx.play_sfx("step_forest", vol_db)
+		else:
+			arena.sfx.play_sfx("step_metal", vol_db)
+
 	func _build_sculpted_weapons() -> void:
 		weapon_models.clear()
 		var gun_dark = StandardMaterial3D.new()
 		gun_dark.albedo_color = Color(0.16, 0.19, 0.24)
-		gun_dark.metallic = 0.85
-		gun_dark.roughness = 0.30
+		gun_dark.metallic = 0.86
+		gun_dark.roughness = 0.28
 
 		var gun_body = StandardMaterial3D.new()
 		gun_body.albedo_color = Color(0.46, 0.52, 0.60)
-		gun_body.metallic = 0.80
-		gun_body.roughness = 0.26
+		gun_body.metallic = 0.82
+		gun_body.roughness = 0.24
 
 		var gun_chrome = arena.mat_chrome
 
@@ -1943,9 +1972,9 @@ class UTPlayer extends CharacterBody3D:
 
 		var w1 = Node3D.new()
 		var flk_yellow = StandardMaterial3D.new()
-		flk_yellow.albedo_color = Color(0.95, 0.68, 0.08)
-		flk_yellow.metallic = 0.65
-		flk_yellow.roughness = 0.32
+		flk_yellow.albedo_color = Color(0.92, 0.66, 0.10)
+		flk_yellow.metallic = 0.68
+		flk_yellow.roughness = 0.30
 		_vm_cyl(w1, Vector3(0, -0.01, 0.04), 0.095, 0.42, flk_yellow)
 		_vm_box(w1, Vector3(0, 0.068, -0.04), Vector3(0.14, 0.036, 0.38), gun_dark)
 		_vm_box(w1, Vector3(0, -0.085, -0.02), Vector3(0.12, 0.032, 0.34), gun_dark)
@@ -1972,8 +2001,8 @@ class UTPlayer extends CharacterBody3D:
 		var w2 = Node3D.new()
 		var rkt_red = StandardMaterial3D.new()
 		rkt_red.albedo_color = Color(0.68, 0.16, 0.14)
-		rkt_red.metallic = 0.70
-		rkt_red.roughness = 0.34
+		rkt_red.metallic = 0.72
+		rkt_red.roughness = 0.32
 		_vm_cyl(w2, Vector3(0, 0.0, 0.08), 0.115, 0.40, rkt_red)
 		_vm_box(w2, Vector3(0, 0.115, 0.04), Vector3(0.13, 0.036, 0.36), gun_dark)
 		_vm_box(w2, Vector3(0, -0.11, 0.06), Vector3(0.11, 0.032, 0.30), gun_dark)
@@ -2076,7 +2105,7 @@ class UTPlayer extends CharacterBody3D:
 		if is_on_floor():
 			velocity.y = j_imp
 			jumps_used = 1
-			arena.sfx.play_sfx("step")
+			_play_surface_step(-2.0)
 		elif jumps_used < 2:
 			velocity.y = max(velocity.y * 0.45 + j_imp * 0.94, j_imp * 0.94)
 			jumps_used = 2
@@ -2170,12 +2199,16 @@ class UTPlayer extends CharacterBody3D:
 		var grav = arena.get_gravity_accel()
 		if not is_on_floor():
 			velocity.y -= grav * delta
+			was_in_air = true
 		else:
+			if was_in_air:
+				was_in_air = false
+				_play_surface_step(-1.0)
 			jumps_used = 0
 
 		var wish = _get_move_input_world()
 		var max_spd = 13.0 if arena.cfg_mode == 2 else 11.4
-		var accel = 13.5 if is_on_floor() else (5.2 if arena.cfg_map == 1 else 3.4)
+		var accel = 13.5 if is_on_floor() else (5.4 if arena.cfg_map == 1 else 3.4)
 		var target_vx = wish.x * max_spd
 		var target_vz = wish.z * max_spd
 		var hspd = Vector2(velocity.x, velocity.z).length()
@@ -2203,9 +2236,9 @@ class UTPlayer extends CharacterBody3D:
 		if is_on_floor() and move_ratio > 0.15:
 			bob_t += delta * 11.5 * move_ratio
 			step_accum += delta * move_ratio
-			if step_accum >= 0.36:
+			if step_accum >= 0.35:
 				step_accum = 0.0
-				arena.sfx.play_sfx("step")
+				_play_surface_step(-4.5)
 		recoil_z = lerp(recoil_z, 0.0, clamp(delta * 11.0, 0.0, 1.0))
 		recoil_pitch = lerp(recoil_pitch, 0.0, clamp(delta * 10.0, 0.0, 1.0))
 		weapon_pivot.position = Vector3(
@@ -2222,7 +2255,7 @@ class UTPlayer extends CharacterBody3D:
 			anim_flak_jaw_l.position.x = -spread_x
 			anim_flak_jaw_r.position.x = spread_x
 		if anim_rkt_barrels != null and recoil_z > 0.01:
-			anim_rkt_barrels.rotation.z += delta * 9.0
+			anim_rkt_barrels.rotation.z += delta * 11.0
 		if anim_link_ring != null:
 			anim_link_ring.rotation.z += delta * (14.0 if want_fire or want_alt else 3.2)
 
@@ -2249,7 +2282,7 @@ class UTPlayer extends CharacterBody3D:
 		var mult = 2.0 if udamage_timer > 0.0 else 1.0
 		var cam_pos = cam.global_position
 		var cam_dir = -cam.global_transform.basis.z
-		var muzzle_pos = weapon_pivot.global_position + cam_dir * 0.45
+		var muzzle_pos = weapon_pivot.global_position + cam_dir * 0.55
 
 		if current_weapon == 0:
 			if not is_alt:
@@ -2274,14 +2307,14 @@ class UTPlayer extends CharacterBody3D:
 						arena.hud.trigger_hitmarker()
 					else:
 						arena.spawn_sparks(end_p, beam_col, 8)
-				arena.spawn_beam(muzzle_pos, end_p, beam_col, 0.08 if is_insta else 0.065, 0.18)
+				arena.spawn_beam(muzzle_pos, end_p, beam_col, 0.075 if is_insta else 0.060, 0.18)
 			else:
 				fire_cd = 0.56
 				recoil_z = 0.11
 				recoil_pitch = 0.06
 				_flash_muzzle(Color(0.75, 0.28, 1.0))
 				arena.sfx.play_sfx("shock_fire")
-				arena.spawn_shock_core(muzzle_pos + cam_dir * 0.4, cam_dir * 15.5, self)
+				arena.spawn_shock_core(muzzle_pos + cam_dir * 0.45, cam_dir * 15.5, self)
 
 		elif current_weapon == 1:
 			if not is_alt:
@@ -2307,15 +2340,15 @@ class UTPlayer extends CharacterBody3D:
 
 		elif current_weapon == 2:
 			if not is_alt:
-				fire_cd = 0.78
+				fire_cd = 0.80
 				recoil_z = 0.20
-				recoil_pitch = 0.13
+				recoil_pitch = 0.14
 				add_shake(0.10)
 				_flash_muzzle(Color(1.0, 0.42, 0.14))
 				arena.sfx.play_sfx("rocket_fire")
-				arena.spawn_projectile(muzzle_pos + cam_dir * 0.35, cam_dir * 36.0, "rocket", self, int(96 * mult), 6.2, 0)
+				arena.spawn_projectile(muzzle_pos + cam_dir * 0.40, cam_dir * 36.0, "rocket", self, int(96 * mult), 6.2, 0)
 			else:
-				fire_cd = 1.25
+				fire_cd = 1.28
 				recoil_z = 0.24
 				recoil_pitch = 0.16
 				add_shake(0.15)
@@ -2323,7 +2356,7 @@ class UTPlayer extends CharacterBody3D:
 				arena.sfx.play_sfx("rocket_fire")
 				for ang in [-0.08, 0.0, 0.08]:
 					var rdir = cam_dir.rotated(Vector3.UP, ang)
-					arena.spawn_projectile(muzzle_pos + rdir * 0.4, rdir * 34.0, "rocket", self, int(72 * mult), 5.4, 0)
+					arena.spawn_projectile(muzzle_pos + rdir * 0.45, rdir * 34.0, "rocket", self, int(72 * mult), 5.4, 0)
 
 		elif current_weapon == 3:
 			if not is_alt:
@@ -2346,11 +2379,11 @@ class UTPlayer extends CharacterBody3D:
 					if co is UTBot and co.team != team:
 						co.apply_damage(int(19 * mult), self, "Link Beam", cam_dir * 2.5)
 						arena.hud.trigger_hitmarker()
-				arena.spawn_beam(muzzle_pos, end2, Color(0.25, 1.0, 0.42), 0.052, 0.10)
+				arena.spawn_beam(muzzle_pos, end2, Color(0.25, 1.0, 0.42), 0.048, 0.10)
 
 	func _flash_muzzle(col: Color) -> void:
 		muzzle_mat.albedo_color = col
-		muzzle_timer = 0.06
+		muzzle_timer = 0.055
 
 	func _raycast(from_pos: Vector3, to_pos: Vector3, mask: int, check_areas: bool) -> Dictionary:
 		var space = get_world_3d().direct_space_state
@@ -2403,7 +2436,7 @@ class UTPlayer extends CharacterBody3D:
 			arena.sfx.play_announcer("ann_unstoppable")
 
 # ==============================================================================
-# SKELETAL 3D SOLDIER BOT
+# SKELETAL 3D SOLDIER BOT (High-Contrast Teams + Distance Weapons + Death Pose)
 # ==============================================================================
 class UTBot extends CharacterBody3D:
 	var arena: Node3D = null
@@ -2460,15 +2493,17 @@ class UTBot extends CharacterBody3D:
 	func _build_visual() -> void:
 		var is_blue = (team == 0)
 		var glow_mat = arena.mat_glow_cyan if is_blue else arena.mat_glow_red
+		var team_mat = arena.mat_team_blue if is_blue else arena.mat_team_red
 		if team >= 10:
 			glow_mat = arena.mat_glow_orange if (team % 2 == 0) else arena.mat_glow_red
+			team_mat = arena.mat_glow_orange if (team % 2 == 0) else arena.mat_team_red
 		var armor_tint = Color(0.28, 0.72, 1.0) if is_blue else Color(1.0, 0.26, 0.22)
 
 		gun_glow_mat = StandardMaterial3D.new()
 		gun_glow_mat.albedo_color = glow_mat.albedo_color
 		gun_glow_mat.emission_enabled = true
 		gun_glow_mat.emission = glow_mat.albedo_color
-		gun_glow_mat.emission_energy_multiplier = 2.8
+		gun_glow_mat.emission_energy_multiplier = 2.6
 
 		if arena.soldier_scene != null:
 			var model = arena.soldier_scene.instantiate()
@@ -2479,7 +2514,7 @@ class UTBot extends CharacterBody3D:
 
 			var skel = _find_skeleton(model)
 			if skel != null:
-				_attach_bone_gear(skel, glow_mat)
+				_attach_bone_gear(skel, glow_mat, team_mat)
 
 			anim_player = _find_anim_player(model)
 			if anim_player != null:
@@ -2498,20 +2533,17 @@ class UTBot extends CharacterBody3D:
 				if anim_idle == "":
 					anim_idle = anim_run
 		else:
-			var body_mat = StandardMaterial3D.new()
-			body_mat.albedo_color = Color(0.20, 0.42, 0.72) if is_blue else Color(0.68, 0.22, 0.20)
-			body_mat.metallic = 0.75
-			body_mat.roughness = 0.30
-			_part(body_rig, Vector3(0, 1.15, 0), Vector3(0.56, 0.68, 0.34), body_mat)
-			_part(body_rig, Vector3(0, 1.66, 0), Vector3(0.32, 0.34, 0.34), body_mat)
-			_part(body_rig, Vector3(-0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), body_mat)
-			_part(body_rig, Vector3(0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), body_mat)
-			_part(body_rig, Vector3(-0.38, 1.15, 0), Vector3(0.18, 0.68, 0.20), body_mat)
-			_part(body_rig, Vector3(0.38, 1.15, -0.15), Vector3(0.18, 0.62, 0.20), body_mat)
+			_part(body_rig, Vector3(0, 1.15, 0), Vector3(0.56, 0.68, 0.34), team_mat)
+			_part(body_rig, Vector3(0, 1.66, 0), Vector3(0.32, 0.34, 0.34), team_mat)
+			_part(body_rig, Vector3(-0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), arena.mat_dark_steel)
+			_part(body_rig, Vector3(0.16, 0.45, 0), Vector3(0.20, 0.85, 0.22), arena.mat_dark_steel)
+			_part(body_rig, Vector3(-0.38, 1.15, 0), Vector3(0.18, 0.68, 0.20), team_mat)
+			_part(body_rig, Vector3(0.38, 1.15, -0.15), Vector3(0.18, 0.62, 0.20), team_mat)
 			_part(body_rig, Vector3(0, 1.68, -0.18), Vector3(0.26, 0.09, 0.06), glow_mat)
 
-		_part(body_rig, Vector3(-0.35, 1.45, 0.0), Vector3(0.16, 0.12, 0.22), glow_mat)
-		_part(body_rig, Vector3(0.35, 1.45, 0.0), Vector3(0.16, 0.12, 0.22), glow_mat)
+		_part(body_rig, Vector3(-0.36, 1.46, 0.0), Vector3(0.18, 0.14, 0.24), team_mat)
+		_part(body_rig, Vector3(0.36, 1.46, 0.0), Vector3(0.18, 0.14, 0.24), team_mat)
+		_part(body_rig, Vector3(0.0, 1.76, -0.02), Vector3(0.08, 0.10, 0.26), glow_mat)
 
 		gun_pivot = Node3D.new()
 		gun_pivot.position = Vector3(0.30, 1.32, 0.0)
@@ -2539,7 +2571,7 @@ class UTBot extends CharacterBody3D:
 		gun_glow_mat.albedo_color = col
 		gun_glow_mat.emission = col
 
-	func _attach_bone_gear(skel: Skeleton3D, glow_mat: Material) -> void:
+	func _attach_bone_gear(skel: Skeleton3D, glow_mat: Material, team_mat: Material) -> void:
 		var chest_idx = -1
 		var head_idx = -1
 		for i in range(skel.get_bone_count()):
@@ -2553,13 +2585,13 @@ class UTBot extends CharacterBody3D:
 			var ba_c = BoneAttachment3D.new()
 			ba_c.bone_name = skel.get_bone_name(chest_idx)
 			skel.add_child(ba_c)
-			_part(ba_c, Vector3(0, 0.08, -0.14), Vector3(0.18, 0.22, 0.08), glow_mat)
+			_part(ba_c, Vector3(0, 0.08, -0.14), Vector3(0.24, 0.26, 0.10), team_mat)
 
 		if head_idx != -1:
 			var ba_h = BoneAttachment3D.new()
 			ba_h.bone_name = skel.get_bone_name(head_idx)
 			skel.add_child(ba_h)
-			_part(ba_h, Vector3(0, 0.10, 0.11), Vector3(0.16, 0.05, 0.05), glow_mat)
+			_part(ba_h, Vector3(0, 0.10, 0.11), Vector3(0.18, 0.06, 0.06), glow_mat)
 
 	func _part(parent: Node3D, pos: Vector3, sz: Vector3, mat: Material) -> void:
 		var mi = MeshInstance3D.new()
@@ -2579,8 +2611,8 @@ class UTBot extends CharacterBody3D:
 					if orig is StandardMaterial3D:
 						var dup = orig.duplicate()
 						dup.albedo_color = dup.albedo_color * tint
-						dup.metallic = 0.55
-						dup.roughness = 0.36
+						dup.metallic = 0.45
+						dup.roughness = 0.38
 						mi.set_surface_override_material(s, dup)
 		for c in node.get_children():
 			_tint_meshes(c, tint)
@@ -2663,8 +2695,8 @@ class UTBot extends CharacterBody3D:
 				Vector3(34.0, 0.2, -32.0),
 				Vector3(-34.0, 0.2, 32.0),
 				Vector3(34.0, 0.2, 32.0),
-				Vector3(-13.0, 0.2, -16.0),
-				Vector3(13.0, 0.2, 16.0),
+				Vector3(-13.0, 0.2, -16.5),
+				Vector3(13.0, 0.2, 16.5),
 				Vector3(0.0, 7.8, -24.0),
 				Vector3(0.0, 7.8, 24.0),
 				Vector3(-26.0, 7.8, 0.0),
@@ -2882,7 +2914,7 @@ class UTBot extends CharacterBody3D:
 				var co = hit["collider"]
 				if (co is UTBot or co is UTPlayer) and co.team != team:
 					co.apply_damage(250, self, "InstaGib", dir * 9.0)
-			arena.spawn_beam(origin, end_p, Color(1.0, 0.25, 0.45), 0.06, 0.16)
+			arena.spawn_beam(origin, end_p, Color(1.0, 0.25, 0.45), 0.055, 0.16)
 			return
 
 		if active_weapon == 1:
@@ -2906,7 +2938,7 @@ class UTBot extends CharacterBody3D:
 				if (co is UTBot or co is UTPlayer) and co.team != team:
 					co.apply_damage(int(24 * mult), self, "Shock Rifle", dir * 5.5)
 					arena.spawn_sparks(end_p, Color(0.82, 0.35, 1.0), 8)
-			arena.spawn_beam(origin, end_p, Color(0.82, 0.35, 1.0), 0.045, 0.14)
+			arena.spawn_beam(origin, end_p, Color(0.82, 0.35, 1.0), 0.042, 0.14)
 		else:
 			fire_cd = randf_range(0.32, 0.55) * cd_mult
 			arena.spawn_projectile(origin, dir * 46.0, "plasma", self, int(13 * mult), 0.0, 0)
@@ -2943,7 +2975,7 @@ class UTBot extends CharacterBody3D:
 			arena.spawn_sparks(global_position + Vector3(0, 1.0, 0), col, 12)
 
 # ==============================================================================
-# PROJECTILES, SHOCK CORE & PARTICLE VFX
+# PROJECTILES (WITH 3D IN-FLIGHT ROCKET AUDIO), SHOCK CORE & PARTICLE VFX
 # ==============================================================================
 class UTProjectile extends Node3D:
 	var arena: Node3D = null
@@ -2953,8 +2985,9 @@ class UTProjectile extends Node3D:
 	var dmg: int = 20
 	var splash: float = 0.0
 	var bounces: int = 0
-	var life: float = 4.2
+	var life: float = 4.5
 	var trail_timer: float = 0.0
+	var fly_snd: AudioStreamPlayer3D = null
 
 	func setup(p: Vector3, v: Vector3, k: String, att, d: int, sp: float, bnc: int) -> void:
 		position = p
@@ -2975,6 +3008,16 @@ class UTProjectile extends Node3D:
 			mi.mesh = cm
 			mi.rotation_degrees = Vector3(90, 0, 0)
 			mi.material_override = arena.mat_glow_orange
+			var f_stream = arena.sfx.get_stream("rocket_fly")
+			if f_stream != null and arena.game_state == 1:
+				fly_snd = AudioStreamPlayer3D.new()
+				fly_snd.stream = f_stream
+				fly_snd.unit_size = 9.0
+				fly_snd.max_distance = 52.0
+				fly_snd.volume_db = -1.5
+				fly_snd.finished.connect(_on_fly_loop)
+				add_child(fly_snd)
+				fly_snd.play()
 		elif kind == "flak":
 			var bm = BoxMesh.new()
 			bm.size = Vector3(0.11, 0.07, 0.24)
@@ -2998,6 +3041,10 @@ class UTProjectile extends Node3D:
 			mi.material_override = arena.mat_glow_green if (attacker == arena.player or attacker.team == 0) else arena.mat_glow_red
 		add_child(mi)
 
+	func _on_fly_loop() -> void:
+		if is_instance_valid(fly_snd) and life > 0.05:
+			fly_snd.play()
+
 	func step_projectile(delta: float) -> bool:
 		life -= delta
 		if life <= 0.0:
@@ -3010,7 +3057,7 @@ class UTProjectile extends Node3D:
 			if trail_timer <= 0.0:
 				trail_timer = 0.032
 				var puff = UTExplosionFX.new()
-				puff.setup(global_position, 0.36, Color(1.0, 0.62, 0.22), 0.18, false)
+				puff.setup(global_position, 0.38, Color(1.0, 0.62, 0.22), 0.19, false)
 				arena.add_child(puff)
 				arena.effects.append(puff)
 
@@ -3132,7 +3179,7 @@ class UTBeamFX extends Node3D:
 		life = dur
 		max_life = dur
 		var dist = a.distance_to(b)
-		if dist < 0.05:
+		if dist < 0.08:
 			return
 		var mi = MeshInstance3D.new()
 		var cm = CylinderMesh.new()
@@ -3643,7 +3690,7 @@ class UTMenuUI extends CanvasLayer:
 		vbox.add_child(title_lbl)
 
 		sub_lbl = Label.new()
-		sub_lbl.text = "SELECT MAP & MATCH SETTINGS"
+		sub_lbl.text = "1K PBR EDITION  •  SELECT MAP & SETTINGS"
 		sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		sub_lbl.add_theme_font_size_override("font_size", 13)
 		sub_lbl.add_theme_color_override("font_color", Color(0.75, 0.84, 0.95))
@@ -3830,7 +3877,7 @@ class UTMenuUI extends CanvasLayer:
 		backdrop.visible = true
 		title_lbl.text = "UNREAL TOURNAMENT: MOBILE ARENA"
 		title_lbl.add_theme_color_override("font_color", Color(0.25, 0.92, 1.0))
-		sub_lbl.text = "CHOOSE MAP WITH THUMBNAILS  •  TOKARA FOREST (LOW-G) OR DECK17 (1.0G)"
+		sub_lbl.text = "1K PBR + DSP AUDIO  •  TOKARA FOREST (LOW-G) OR DECK17 (1.0G)"
 		play_btn.text = "PLAY MATCH"
 		resume_btn.visible = false
 		main_btn.visible = false
