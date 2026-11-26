@@ -2,7 +2,7 @@ extends Node3D
 
 # ==============================================================================
 # UT2004 MOBILE ARENA — DM-DECK17 NEXT-GEN EDITION
-# Anti-Aliased Smooth PBR + Orbital Space Backdrop + Sculpted Weapons + 60 FPS
+# Smart Weapon-Switching Bots + Muzzle-Aligned Rifles + Anti-Stuck AI + 60 FPS
 # ==============================================================================
 
 const LAYER_WORLD: int = 1
@@ -123,7 +123,6 @@ func _apply_graphics_settings() -> void:
 	root_win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 	root_win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	root_win.content_scale_size = Vector2i(1280, 720)
-	# 2x MSAA + smooth 3D render scale eliminates metallic shimmer & boosts tablet FPS
 	root_win.msaa_3d = Viewport.MSAA_2X
 	root_win.scaling_3d_scale = 0.92 if cfg_high_gfx else 0.78
 	Engine.max_fps = 60
@@ -229,7 +228,6 @@ func _load_assets_and_materials() -> void:
 				soldier_scene = ps
 				root_node.queue_free()
 
-	# Smooth, anti-shimmer PBR steel: larger UV scale + gentle normal_scale (0.28)
 	mat_floor = _make_pbr_material("floor", Color(0.46, 0.52, 0.60), 0.42, 0.78, Vector3(0.11, 0.11, 0.11), true, true)
 	mat_wall = _make_pbr_material("wall", Color(0.38, 0.44, 0.52), 0.48, 0.72, Vector3(0.09, 0.09, 0.09), false, false)
 
@@ -395,7 +393,6 @@ func _setup_environment() -> void:
 	world_env = WorldEnvironment.new()
 	var env = Environment.new()
 
-	# Deep Space Cyberpunk Sky with subtle nebula horizon for smooth steel reflections
 	var sky = Sky.new()
 	var sky_mat = ProceduralSkyMaterial.new()
 	sky_mat.sky_top_color = Color(0.015, 0.025, 0.06)
@@ -422,7 +419,6 @@ func _setup_environment() -> void:
 	world_env.environment = env
 	add_child(world_env)
 
-	# Warm industrial key light
 	var sun_key = DirectionalLight3D.new()
 	sun_key.light_color = Color(0.96, 0.85, 0.72)
 	sun_key.light_energy = 0.74
@@ -430,7 +426,6 @@ func _setup_environment() -> void:
 	sun_key.shadow_enabled = false
 	add_child(sun_key)
 
-	# Cool cyber rim light
 	var sun_rim = DirectionalLight3D.new()
 	sun_rim.light_color = Color(0.36, 0.74, 1.0)
 	sun_rim.light_energy = 0.38
@@ -438,7 +433,6 @@ func _setup_environment() -> void:
 	sun_rim.shadow_enabled = false
 	add_child(sun_rim)
 
-	# 3 fast local lights (acid pit, Blue base, Red base)
 	_add_point_light(Vector3(0, 1.2, 0), Color(0.25, 1.0, 0.22), 3.8, 22.0)
 	_add_point_light(Vector3(0, 6.8, -22), Color(0.18, 0.78, 1.0), 2.8, 24.0)
 	_add_point_light(Vector3(0, 6.8, 22), Color(1.0, 0.30, 0.22), 2.8, 24.0)
@@ -453,7 +447,6 @@ func _add_point_light(pos: Vector3, col: Color, energy: float, rng: float) -> vo
 	add_child(l)
 
 func _build_orbital_backdrop() -> void:
-	# Giant planet + rotating orbital space station visible through the arena's armored windows
 	var planet = MeshInstance3D.new()
 	var sm = SphereMesh.new()
 	sm.radius = 28.0
@@ -505,7 +498,6 @@ func _build_orbital_backdrop() -> void:
 		beacon.position = Vector3(0, ry, 0)
 		orbital_station.add_child(beacon)
 
-	# Starfield points outside the arena
 	var star_mm = MultiMesh.new()
 	star_mm.transform_format = MultiMesh.TRANSFORM_3D
 	var sb = BoxMesh.new()
@@ -589,20 +581,17 @@ func _add_wall_reactor(pos: Vector3, glow_mat: Material) -> void:
 		_add_box(pos + Vector3(0, y_ring, 0.35), Vector3(1.3, 0.24, 0.9), mat_chrome, Vector3.ZERO, false)
 
 func _build_deck17_arena() -> void:
-	# Lower floor around central acid vat
 	_add_box(Vector3(0, -0.5, -18.5), Vector3(48, 1.0, 19.0), mat_floor)
 	_add_box(Vector3(0, -0.5, 18.5), Vector3(48, 1.0, 19.0), mat_floor)
 	_add_box(Vector3(-15.5, -0.5, 0), Vector3(17.0, 1.0, 18.0), mat_floor)
 	_add_box(Vector3(15.5, -0.5, 0), Vector3(17.0, 1.0, 18.0), mat_floor)
 
-	# Acid vat basin floor & walls
 	_add_box(Vector3(0, -3.0, 0), Vector3(16.0, 1.0, 20.0), mat_dark_steel)
 	_add_box(Vector3(0, -1.6, -9.2), Vector3(14.8, 2.4, 0.6), mat_dark_steel)
 	_add_box(Vector3(0, -1.6, 9.2), Vector3(14.8, 2.4, 0.6), mat_dark_steel)
 	_add_box(Vector3(-7.2, -1.6, 0), Vector3(0.6, 2.4, 18.8), mat_dark_steel)
 	_add_box(Vector3(7.2, -1.6, 0), Vector3(0.6, 2.4, 18.8), mat_dark_steel)
 
-	# Bubbling green acid surface
 	var acid_mesh = MeshInstance3D.new()
 	var pm = PlaneMesh.new()
 	pm.size = Vector2(14.2, 18.2)
@@ -611,14 +600,11 @@ func _build_deck17_arena() -> void:
 	acid_mesh.position = Vector3(0, -1.35, 0)
 	add_child(acid_mesh)
 
-	# Hazard warning trim strips around the acid vat
 	_add_box(Vector3(0, 0.04, -9.25), Vector3(15.0, 0.08, 0.55), mat_trim, Vector3.ZERO, false)
 	_add_box(Vector3(0, 0.04, 9.25), Vector3(15.0, 0.08, 0.55), mat_trim, Vector3.ZERO, false)
 	_add_box(Vector3(-7.25, 0.04, 0), Vector3(0.55, 0.08, 18.0), mat_trim, Vector3.ZERO, false)
 	_add_box(Vector3(7.25, 0.04, 0), Vector3(0.55, 0.08, 18.0), mat_trim, Vector3.ZERO, false)
 
-	# Perimeter walls with armored panoramic viewport windows on North & South!
-	# North Wall (Blue Base) - lower wall + upper header + side pillars + armored glass
 	_add_box(Vector3(0, 4.2, -28.5), Vector3(50, 9.4, 1.0), mat_wall)
 	_add_box(Vector3(0, 13.7, -28.5), Vector3(50, 1.6, 1.0), mat_wall)
 	_add_box(Vector3(-19.5, 10.9, -28.5), Vector3(11.0, 4.2, 1.0), mat_wall)
@@ -627,7 +613,6 @@ func _build_deck17_arena() -> void:
 	for wx in [-9.0, 0.0, 9.0]:
 		_add_box(Vector3(wx, 10.9, -28.5), Vector3(0.45, 4.2, 0.9), mat_dark_steel, Vector3.ZERO, false)
 
-	# South Wall (Red Base) - lower wall + upper header + side pillars + armored glass
 	_add_box(Vector3(0, 4.2, 28.5), Vector3(50, 9.4, 1.0), mat_wall)
 	_add_box(Vector3(0, 13.7, 28.5), Vector3(50, 1.6, 1.0), mat_wall)
 	_add_box(Vector3(-19.5, 10.9, 28.5), Vector3(11.0, 4.2, 1.0), mat_wall)
@@ -636,11 +621,9 @@ func _build_deck17_arena() -> void:
 	for wx2 in [-9.0, 0.0, 9.0]:
 		_add_box(Vector3(wx2, 10.9, 28.5), Vector3(0.45, 4.2, 0.9), mat_dark_steel, Vector3.ZERO, false)
 
-	# East & West solid industrial walls
 	_add_box(Vector3(-24.5, 7.0, 0), Vector3(1.0, 15.0, 58.0), mat_wall)
 	_add_box(Vector3(24.5, 7.0, 0), Vector3(1.0, 15.0, 58.0), mat_wall)
 
-	# Ceiling & heavy steel roof trusses + light strips + overhead pipes
 	_add_box(Vector3(0, 14.5, 0), Vector3(50, 1.0, 58), mat_dark_steel)
 	for z_beam in [-20.0, -10.0, 0.0, 10.0, 20.0]:
 		_add_box(Vector3(0, 13.4, z_beam), Vector3(48, 1.2, 1.2), mat_dark_steel, Vector3.ZERO, false)
@@ -648,7 +631,6 @@ func _build_deck17_arena() -> void:
 	_add_cyl(Vector3(-15.5, 12.2, 0), 0.38, 55.0, mat_chrome, Vector3(90, 0, 0))
 	_add_cyl(Vector3(15.5, 12.2, 0), 0.38, 55.0, mat_chrome, Vector3(90, 0, 0))
 
-	# Team Base Neon Strips & Wall Reactors
 	_add_box(Vector3(0, 8.6, -27.85), Vector3(24.0, 0.35, 0.25), mat_glow_cyan, Vector3.ZERO, false)
 	_add_box(Vector3(0, 8.6, 27.85), Vector3(24.0, 0.35, 0.25), mat_glow_red, Vector3.ZERO, false)
 	_add_wall_reactor(Vector3(-16.0, 8.2, -27.5), mat_glow_cyan)
@@ -656,13 +638,11 @@ func _build_deck17_arena() -> void:
 	_add_wall_reactor(Vector3(-16.0, 8.2, 27.5), mat_glow_red)
 	_add_wall_reactor(Vector3(16.0, 8.2, 27.5), mat_glow_red)
 
-	# Upper Deck Catwalks (Y = 4.4)
 	_add_box(Vector3(0, 4.15, -23.5), Vector3(48, 0.5, 9.0), mat_floor)
 	_add_box(Vector3(0, 4.15, 23.5), Vector3(48, 0.5, 9.0), mat_floor)
 	_add_box(Vector3(-20.0, 4.15, 0), Vector3(8.0, 0.5, 38.0), mat_floor)
 	_add_box(Vector3(20.0, 4.15, 0), Vector3(8.0, 0.5, 38.0), mat_floor)
 
-	# Upper Deck Safety Railings
 	_add_railing(Vector3(-8.5, 4.4, -19.1), Vector3(10.5, 4.4, -19.1))
 	_add_railing(Vector3(-10.5, 4.4, 19.1), Vector3(8.5, 4.4, 19.1))
 	_add_railing(Vector3(-16.1, 4.4, -14.0), Vector3(-16.1, 4.4, -3.0))
@@ -670,18 +650,15 @@ func _build_deck17_arena() -> void:
 	_add_railing(Vector3(16.1, 4.4, -12.5), Vector3(16.1, 4.4, -3.0))
 	_add_railing(Vector3(16.1, 4.4, 3.0), Vector3(16.1, 4.4, 14.0))
 
-	# Central High Bridge across the acid vat
 	_add_box(Vector3(0, 4.15, 0), Vector3(32.0, 0.48, 4.6), mat_floor)
 	_add_box(Vector3(0, 4.42, -2.2), Vector3(30.0, 0.14, 0.24), mat_glow_purple, Vector3.ZERO, false)
 	_add_box(Vector3(0, 4.42, 2.2), Vector3(30.0, 0.14, 0.24), mat_glow_purple, Vector3.ZERO, false)
 
-	# Wide gentle ramps from Lower Floor up to Upper Deck
 	_add_box(Vector3(-12.5, 2.05, -13.0), Vector3(4.6, 0.45, 12.8), mat_floor, Vector3(20.5, 0, 0))
 	_add_box(Vector3(12.5, 2.05, 13.0), Vector3(4.6, 0.45, 12.8), mat_floor, Vector3(-20.5, 0, 0))
 	_add_box(Vector3(-14.7, 2.35, -13.0), Vector3(0.25, 0.4, 12.8), mat_trim, Vector3(20.5, 0, 0), false)
 	_add_box(Vector3(14.7, 2.35, 13.0), Vector3(0.25, 0.4, 12.8), mat_trim, Vector3(-20.5, 0, 0), false)
 
-	# Massive Deck17 support pillars around the pit corners
 	var pillar_coords = [
 		Vector3(-9.5, 6.8, -11.5),
 		Vector3(9.5, 6.8, -11.5),
@@ -694,7 +671,6 @@ func _build_deck17_arena() -> void:
 		_add_box(Vector3(p.x, 2.2, p.z), Vector3(2.65, 0.38, 2.65), mat_trim, Vector3.ZERO, false)
 		_add_box(Vector3(p.x, 7.6, p.z), Vector3(2.6, 0.26, 2.6), mat_glow_orange, Vector3.ZERO, false)
 
-	# Sci-Fi Cover Crates & Bunkers
 	_add_scifi_crate(Vector3(0, 1.1, -15.0), Vector3(4.8, 2.2, 1.5), mat_glow_cyan)
 	_add_scifi_crate(Vector3(0, 1.1, 15.0), Vector3(4.8, 2.2, 1.5), mat_glow_red)
 	_add_scifi_crate(Vector3(-13.5, 1.0, 5.5), Vector3(2.5, 2.0, 2.5), mat_glow_orange)
@@ -702,7 +678,6 @@ func _build_deck17_arena() -> void:
 	_add_scifi_crate(Vector3(-19.2, 5.4, -9.5), Vector3(1.4, 2.0, 3.6), mat_glow_cyan)
 	_add_scifi_crate(Vector3(19.2, 5.4, 9.5), Vector3(1.4, 2.0, 3.6), mat_glow_red)
 
-	# Glowing Jump Pads
 	_add_jump_pad(Vector3(13.5, 0.08, -14.5), Vector3(19.0, 6.2, -16.0))
 	_add_jump_pad(Vector3(-13.5, 0.08, 14.5), Vector3(-19.0, 6.2, 16.0))
 
@@ -1284,7 +1259,6 @@ class UTPlayer extends CharacterBody3D:
 		weapon_pivot.position = Vector3(0.28, -0.25, -0.50)
 		cam.add_child(weapon_pivot)
 
-		# Directional 3D Muzzle Flash Star (Cone + Core)
 		muzzle_group = Node3D.new()
 		muzzle_group.position = Vector3(0, 0.02, -0.66)
 		muzzle_group.visible = false
@@ -1333,7 +1307,6 @@ class UTPlayer extends CharacterBody3D:
 
 		var gun_chrome = arena.mat_chrome
 
-		# --- 0: NEXT-GEN SHOCK RIFLE ---
 		var w0 = Node3D.new()
 		_vm_box(w0, Vector3(0, -0.02, 0.06), Vector3(0.10, 0.12, 0.44), gun_dark)
 		_vm_box(w0, Vector3(0, -0.09, 0.14), Vector3(0.065, 0.10, 0.11), gun_dark, Vector3(18, 0, 0))
@@ -1353,7 +1326,6 @@ class UTPlayer extends CharacterBody3D:
 		weapon_pivot.add_child(w0)
 		weapon_models.append(w0)
 
-		# --- 1: NEXT-GEN FLAK CANNON ---
 		var w1 = Node3D.new()
 		var flk_yellow = StandardMaterial3D.new()
 		flk_yellow.albedo_color = Color(0.95, 0.68, 0.08)
@@ -1362,13 +1334,10 @@ class UTPlayer extends CharacterBody3D:
 		_vm_cyl(w1, Vector3(0, -0.01, 0.04), 0.095, 0.42, flk_yellow)
 		_vm_box(w1, Vector3(0, 0.068, -0.04), Vector3(0.14, 0.036, 0.38), gun_dark)
 		_vm_box(w1, Vector3(0, -0.085, -0.02), Vector3(0.12, 0.032, 0.34), gun_dark)
-		# Heavy side rotary shell drum + pressure pipe
 		_vm_cyl(w1, Vector3(-0.115, -0.02, 0.05), 0.072, 0.18, gun_dark, Vector3(0, 0, 90))
 		_vm_cyl(w1, Vector3(-0.115, -0.02, 0.05), 0.042, 0.19, flk_yellow, Vector3(0, 0, 90))
 		_vm_cyl(w1, Vector3(0.095, 0.04, -0.04), 0.016, 0.32, gun_chrome)
-		# Glowing molten core chamber
 		_vm_cyl(w1, Vector3(0, 0.0, -0.24), 0.050, 0.24, arena.mat_glow_orange)
-		# Animated hydraulic jaws
 		anim_flak_jaw_l = Node3D.new()
 		anim_flak_jaw_l.position = Vector3(-0.082, 0.0, -0.28)
 		w1.add_child(anim_flak_jaw_l)
@@ -1385,7 +1354,6 @@ class UTPlayer extends CharacterBody3D:
 		weapon_pivot.add_child(w1)
 		weapon_models.append(w1)
 
-		# --- 2: NEXT-GEN ROCKET LAUNCHER ---
 		var w2 = Node3D.new()
 		var rkt_red = StandardMaterial3D.new()
 		rkt_red.albedo_color = Color(0.68, 0.16, 0.14)
@@ -1394,10 +1362,8 @@ class UTPlayer extends CharacterBody3D:
 		_vm_cyl(w2, Vector3(0, 0.0, 0.08), 0.115, 0.40, rkt_red)
 		_vm_box(w2, Vector3(0, 0.115, 0.04), Vector3(0.13, 0.036, 0.36), gun_dark)
 		_vm_box(w2, Vector3(0, -0.11, 0.06), Vector3(0.11, 0.032, 0.30), gun_dark)
-		# Laser target designator pod on right side
 		_vm_cyl(w2, Vector3(0.11, 0.08, -0.04), 0.026, 0.22, gun_dark)
 		_vm_cyl(w2, Vector3(0.11, 0.08, -0.155), 0.016, 0.02, arena.mat_glow_red)
-		# Spinning 3-barrel cluster with muzzle collars
 		anim_rkt_barrels = Node3D.new()
 		anim_rkt_barrels.position = Vector3(0, 0.0, -0.28)
 		w2.add_child(anim_rkt_barrels)
@@ -1409,7 +1375,6 @@ class UTPlayer extends CharacterBody3D:
 		weapon_pivot.add_child(w2)
 		weapon_models.append(w2)
 
-		# --- 3: NEXT-GEN LINK GUN ---
 		var w3 = Node3D.new()
 		_vm_cyl(w3, Vector3(0, -0.01, 0.02), 0.072, 0.48, gun_dark)
 		_vm_box(w3, Vector3(-0.062, 0.02, -0.32), Vector3(0.028, 0.058, 0.36), gun_body)
@@ -1820,7 +1785,7 @@ class UTPlayer extends CharacterBody3D:
 			arena.sfx.play_announcer("ann_unstoppable")
 
 # ==============================================================================
-# SKELETAL 3D SOLDIER BOT
+# SKELETAL 3D SOLDIER BOT (Aim-Aligned Rifle + Distance Weapon Switching + Anti-Stuck)
 # ==============================================================================
 class UTBot extends CharacterBody3D:
 	var arena: Node3D = null
@@ -1833,18 +1798,24 @@ class UTBot extends CharacterBody3D:
 	var respawn_timer: float = 0.0
 
 	var visual_root: Node3D = null
+	var gun_pivot: Node3D = null
+	var muzzle_marker: Node3D = null
+	var gun_glow_mat: StandardMaterial3D = null
 	var anim_player: AnimationPlayer = null
 	var anim_idle: String = ""
 	var anim_run: String = ""
 	var current_anim: String = ""
 
+	var active_weapon: int = 3  # 0=Shock, 1=Flak, 2=Rocket, 3=Link
 	var strafe_dir: float = 1.0
 	var strafe_timer: float = 1.2
-	var fire_cd: float = 0.8
+	var fire_cd: float = 0.65
 	var jump_cd: float = 1.0
 	var dodge_cd: float = 1.5
 	var waypoint: Vector3 = Vector3.ZERO
 	var waypoint_timer: float = 0.0
+	var stuck_timer: float = 0.0
+	var last_pos: Vector3 = Vector3.ZERO
 
 	func _ready() -> void:
 		collision_layer = 2
@@ -1870,6 +1841,12 @@ class UTBot extends CharacterBody3D:
 		if team >= 10:
 			glow_mat = arena.mat_glow_orange if (team % 2 == 0) else arena.mat_glow_red
 		var armor_tint = Color(0.45, 0.78, 1.0) if is_blue else Color(1.0, 0.45, 0.42)
+
+		gun_glow_mat = StandardMaterial3D.new()
+		gun_glow_mat.albedo_color = glow_mat.albedo_color
+		gun_glow_mat.emission_enabled = true
+		gun_glow_mat.emission = glow_mat.albedo_color
+		gun_glow_mat.emission_energy_multiplier = 2.8
 
 		if arena.soldier_scene != null:
 			var model = arena.soldier_scene.instantiate()
@@ -1910,30 +1887,43 @@ class UTBot extends CharacterBody3D:
 			_part(visual_root, Vector3(-0.38, 1.15, 0), Vector3(0.18, 0.68, 0.20), body_mat)
 			_part(visual_root, Vector3(0.38, 1.15, -0.15), Vector3(0.18, 0.62, 0.20), body_mat)
 			_part(visual_root, Vector3(0, 1.68, -0.18), Vector3(0.26, 0.09, 0.06), glow_mat)
-			_part(visual_root, Vector3(0.24, 1.20, -0.45), Vector3(0.10, 0.12, 0.66), arena.mat_dark_steel)
-			_part(visual_root, Vector3(0.24, 1.24, -0.58), Vector3(0.05, 0.04, 0.34), glow_mat)
+
+		# Dedicated aim-aligned 3D weapon mount so shots always emerge cleanly from the barrel toward target
+		gun_pivot = Node3D.new()
+		gun_pivot.position = Vector3(0.30, 1.32, 0.0)
+		visual_root.add_child(gun_pivot)
+
+		_part(gun_pivot, Vector3(0.0, 0.0, -0.24), Vector3(0.11, 0.13, 0.64), arena.mat_dark_steel)
+		_part(gun_pivot, Vector3(0.0, 0.05, -0.28), Vector3(0.06, 0.04, 0.48), gun_glow_mat)
+		_part(gun_pivot, Vector3(0.0, -0.05, -0.12), Vector3(0.05, 0.08, 0.10), arena.mat_chrome)
+
+		muzzle_marker = Node3D.new()
+		muzzle_marker.position = Vector3(0.0, 0.02, -0.62)
+		gun_pivot.add_child(muzzle_marker)
+
+	func _set_bot_weapon(wep_idx: int) -> void:
+		active_weapon = wep_idx
+		if gun_glow_mat == null:
+			return
+		var col = Color(0.82, 0.32, 1.0)      # 0: Shock Rifle
+		if wep_idx == 1:
+			col = Color(1.0, 0.62, 0.14)      # 1: Flak Cannon (close range)
+		elif wep_idx == 2:
+			col = Color(1.0, 0.26, 0.18)      # 2: Rocket Launcher (long/splash)
+		elif wep_idx == 3:
+			col = Color(0.22, 1.0, 0.42)      # 3: Link Gun (mid range)
+		gun_glow_mat.albedo_color = col
+		gun_glow_mat.emission = col
 
 	func _attach_bone_gear(skel: Skeleton3D, glow_mat: Material) -> void:
-		var hand_idx = -1
 		var chest_idx = -1
 		var head_idx = -1
 		for i in range(skel.get_bone_count()):
 			var bname = skel.get_bone_name(i).to_lower()
-			if bname.find("righthand") != -1 and hand_idx == -1:
-				hand_idx = i
-			elif bname.find("spine2") != -1 and chest_idx == -1:
+			if bname.find("spine2") != -1 and chest_idx == -1:
 				chest_idx = i
 			elif bname.find("head") != -1 and head_idx == -1:
 				head_idx = i
-
-		if hand_idx != -1:
-			var ba = BoneAttachment3D.new()
-			ba.bone_name = skel.get_bone_name(hand_idx)
-			skel.add_child(ba)
-			var gun = Node3D.new()
-			ba.add_child(gun)
-			_part(gun, Vector3(0.0, 0.14, 0.04), Vector3(0.08, 0.11, 0.56), arena.mat_dark_steel)
-			_part(gun, Vector3(0.0, 0.18, 0.12), Vector3(0.04, 0.04, 0.34), glow_mat)
 
 		if chest_idx != -1:
 			var ba_c = BoneAttachment3D.new()
@@ -2002,6 +1992,8 @@ class UTBot extends CharacterBody3D:
 		udamage_timer = 0.0
 		velocity = Vector3.ZERO
 		global_position = arena.get_spawn_point(team) + Vector3(randf_range(-2.4, 2.4), 0.1, randf_range(-2.4, 2.4))
+		last_pos = global_position
+		stuck_timer = 0.0
 		visual_root.visible = true
 		visual_root.rotation = Vector3.ZERO
 		collision_layer = 2
@@ -2020,13 +2012,13 @@ class UTBot extends CharacterBody3D:
 					best_score = d
 					best_p = p["pos"]
 					found_p = true
-				elif not found_p and (p["kind"] == "udamage" or (armor < 40 and p["kind"] == "armor")) and d < 20.0:
+				elif not found_p and (p["kind"] == "udamage" or (armor < 40 and p["kind"] == "armor")) and d < 22.0:
 					best_score = d
 					best_p = p["pos"]
 					found_p = true
 			if found_p:
 				waypoint = best_p
-				waypoint_timer = 4.0
+				waypoint_timer = 3.8
 				return
 
 		var spots = [
@@ -2042,8 +2034,11 @@ class UTBot extends CharacterBody3D:
 			Vector3(0.0, 4.6, -22.5),
 			Vector3(0.0, 4.6, 22.5)
 		]
-		waypoint = spots[randi() % spots.size()]
-		waypoint_timer = randf_range(3.2, 5.5)
+		var next_w = spots[randi() % spots.size()]
+		if next_w.distance_to(global_position) < 3.0:
+			next_w = spots[(randi() + 1) % spots.size()]
+		waypoint = next_w
+		waypoint_timer = randf_range(3.0, 5.0)
 
 	func _find_target():
 		var best = null
@@ -2090,7 +2085,7 @@ class UTBot extends CharacterBody3D:
 			dodge_cd -= delta
 		strafe_timer -= delta
 		if strafe_timer <= 0.0:
-			strafe_timer = randf_range(0.7, 1.6)
+			strafe_timer = randf_range(0.65, 1.45)
 			strafe_dir = -strafe_dir
 
 		if not is_on_floor():
@@ -2103,28 +2098,42 @@ class UTBot extends CharacterBody3D:
 		if target != null:
 			see_target = _has_los(target)
 
-		if target != null and see_target and (hp >= 35 or arena.cfg_mode == 2):
+		if target != null and see_target and (hp >= 30 or arena.cfg_mode == 2):
 			var to_t = target.global_position - global_position
 			var flat_t = Vector3(to_t.x, 0.0, to_t.z)
 			var dist = flat_t.length()
 			var fwd = flat_t.normalized() if dist > 0.05 else -global_transform.basis.z
 			var right = Vector3(-fwd.z, 0.0, fwd.x)
 
+			# Face target cleanly with bot body and aim rifle at target torso/head
 			var desired_yaw = atan2(-fwd.x, -fwd.z)
-			rotation.y = lerp_angle(rotation.y, desired_yaw, clamp(delta * 10.0, 0.0, 1.0))
+			rotation.y = lerp_angle(rotation.y, desired_yaw, clamp(delta * 12.0, 0.0, 1.0))
+			var aim_pt = target.global_position + Vector3(0, 1.22, 0)
+			var up_v = Vector3.UP if abs(gun_pivot.global_position.direction_to(aim_pt).dot(Vector3.UP)) < 0.98 else Vector3.RIGHT
+			gun_pivot.look_at(aim_pt, up_v)
 
-			move_dir = right * strafe_dir * 0.90
-			if dist > 16.0:
-				move_dir += fwd * 0.72
-			elif dist < 6.5:
-				move_dir -= fwd * 0.60
+			# Choose optimal weapon by combat range
+			if arena.cfg_mode == 2:
+				_set_bot_weapon(0)
+			elif dist < 9.5:
+				_set_bot_weapon(1)       # Close quarters -> Flak Cannon
+			elif dist > 22.0:
+				_set_bot_weapon(2 if randf() < 0.65 else 0) # Long range -> Rocket / Shock
+			else:
+				_set_bot_weapon(3 if randf() < 0.6 else 0)  # Mid range -> Link / Shock
 
-			if is_on_floor() and jump_cd <= 0.0 and randf() < 0.035:
+			move_dir = right * strafe_dir * 0.95
+			if dist > 15.0:
+				move_dir += fwd * 0.78
+			elif dist < 6.0:
+				move_dir -= fwd * 0.65
+
+			if is_on_floor() and jump_cd <= 0.0 and randf() < 0.03:
 				velocity.y = 8.9
 				jump_cd = randf_range(1.4, 2.8)
 
 			if fire_cd <= 0.0 and dist < 48.0:
-				_fire_at(target, dist)
+				_fire_at(aim_pt, dist)
 		else:
 			waypoint_timer -= delta
 			if waypoint_timer <= 0.0 or global_position.distance_to(waypoint) < 2.2:
@@ -2134,8 +2143,10 @@ class UTBot extends CharacterBody3D:
 			if to_w.length() > 0.2:
 				move_dir = to_w.normalized()
 				var wyaw = atan2(-move_dir.x, -move_dir.z)
-				rotation.y = lerp_angle(rotation.y, wyaw, clamp(delta * 7.5, 0.0, 1.0))
+				rotation.y = lerp_angle(rotation.y, wyaw, clamp(delta * 8.5, 0.0, 1.0))
+				gun_pivot.rotation = Vector3.ZERO
 
+		# Acid pit avoidance steering
 		if global_position.y < 2.2:
 			var next_p = global_position + move_dir * 2.3
 			if abs(next_p.x) < 7.8 and abs(next_p.z) < 9.8:
@@ -2143,36 +2154,51 @@ class UTBot extends CharacterBody3D:
 				var tang = Vector3(-away.z, 0.0, away.x) * strafe_dir
 				move_dir = (away * 0.75 + tang * 0.8).normalized()
 
-		var bot_spd = 9.4 if arena.cfg_mode == 2 else (7.8 + float(arena.cfg_difficulty) * 0.8)
+		# Anti-stuck guard: never let a bot freeze in place on a corner/prop
+		if global_position.distance_to(last_pos) < 0.25:
+			stuck_timer += delta
+			if stuck_timer > 0.75:
+				stuck_timer = 0.0
+				strafe_dir = -strafe_dir
+				if is_on_floor():
+					velocity.y = 8.6
+				_pick_smart_waypoint()
+				var escape = (waypoint - global_position)
+				escape.y = 0.0
+				if escape.length() > 0.1:
+					move_dir = (escape.normalized() + Vector3(randf_range(-0.6, 0.6), 0, randf_range(-0.6, 0.6))).normalized()
+		else:
+			stuck_timer = 0.0
+			last_pos = global_position
+
+		var bot_spd = 9.4 if arena.cfg_mode == 2 else (8.2 + float(arena.cfg_difficulty) * 0.8)
 		if move_dir.length() > 0.05:
 			move_dir = move_dir.normalized()
 			var hlen = Vector2(velocity.x, velocity.z).length()
-			var smooth = 4.0 if hlen > bot_spd + 1.5 else 8.5
+			var smooth = 4.0 if hlen > bot_spd + 1.5 else 9.0
 			velocity.x = lerp(velocity.x, move_dir.x * bot_spd, clamp(delta * smooth, 0.0, 1.0))
 			velocity.z = lerp(velocity.z, move_dir.z * bot_spd, clamp(delta * smooth, 0.0, 1.0))
 			_play_anim(anim_run)
 		else:
-			velocity.x = lerp(velocity.x, 0.0, clamp(delta * 8.0, 0.0, 1.0))
-			velocity.z = lerp(velocity.z, 0.0, clamp(delta * 8.0, 0.0, 1.0))
+			_pick_smart_waypoint()
 			_play_anim(anim_idle)
 
 		move_and_slide()
 		arena.check_jump_pads(self)
 
-	func _fire_at(target, dist: float) -> void:
+	func _fire_at(aim_pt: Vector3, dist: float) -> void:
 		var diff = arena.cfg_difficulty
-		var cd_mult = 1.35 if diff == 0 else (1.0 if diff == 1 else 0.72)
-		var spread = 0.095 if diff == 0 else (0.055 if diff == 1 else 0.025)
+		var cd_mult = 1.30 if diff == 0 else (0.95 if diff == 1 else 0.70)
+		var spread = 0.085 if diff == 0 else (0.045 if diff == 1 else 0.020)
 
-		var origin = global_position + Vector3(0, 1.36, 0)
-		var aim = (target.global_position + Vector3(0, 1.15, 0) - origin)
-		var dir = aim.normalized()
-		dir += Vector3(randf_range(-spread, spread), randf_range(-spread * 0.7, spread * 0.7), randf_range(-spread, spread))
+		var origin = muzzle_marker.global_position
+		var dir = (aim_pt - origin).normalized()
+		dir += Vector3(randf_range(-spread, spread), randf_range(-spread * 0.6, spread * 0.6), randf_range(-spread, spread))
 		dir = dir.normalized()
 		var mult = 2.0 if udamage_timer > 0.0 else 1.0
 
 		if arena.cfg_mode == 2:
-			fire_cd = randf_range(0.75, 1.25) * cd_mult
+			fire_cd = randf_range(0.75, 1.20) * cd_mult
 			var space = get_world_3d().direct_space_state
 			var q = PhysicsRayQueryParameters3D.create(origin, origin + dir * 95.0, 1 | 2)
 			q.exclude = [get_rid()]
@@ -2183,18 +2209,38 @@ class UTBot extends CharacterBody3D:
 				var co = hit["collider"]
 				if (co is UTBot or co is UTPlayer) and co.team != team:
 					co.apply_damage(250, self, "InstaGib", dir * 9.0)
-			arena.spawn_beam(origin + dir * 0.5, end_p, Color(1.0, 0.25, 0.45), 0.06, 0.16)
+			arena.spawn_beam(origin, end_p, Color(1.0, 0.25, 0.45), 0.06, 0.16)
 			return
 
-		fire_cd = randf_range(0.62, 1.10) * cd_mult
-		if dist > 19.0 and randf() < 0.45:
-			arena.spawn_projectile(origin + dir * 0.7, dir * 31.0, "rocket", self, int(34 * mult), 4.2, 0)
-		elif dist < 11.0 and randf() < 0.45:
-			for i in range(4):
-				var fdir = (dir + Vector3(randf_range(-0.08, 0.08), randf_range(-0.05, 0.05), randf_range(-0.08, 0.08))).normalized()
-				arena.spawn_projectile(origin + dir * 0.7, fdir * 42.0, "flak", self, int(9 * mult), 0.0, 1)
+		if active_weapon == 1:
+			# Close-range Flak volley from the barrel
+			fire_cd = randf_range(0.58, 0.92) * cd_mult
+			for i in range(5):
+				var fdir = (dir + Vector3(randf_range(-0.075, 0.075), randf_range(-0.045, 0.045), randf_range(-0.075, 0.075))).normalized()
+				arena.spawn_projectile(origin, fdir * 44.0, "flak", self, int(10 * mult), 0.0, 1)
+		elif active_weapon == 2 and dist > 18.0:
+			# Long-range Rocket
+			fire_cd = randf_range(0.78, 1.22) * cd_mult
+			arena.spawn_projectile(origin, dir * 32.0, "rocket", self, int(36 * mult), 4.4, 0)
+		elif active_weapon == 0:
+			# Shock Rifle precision beam
+			fire_cd = randf_range(0.68, 1.05) * cd_mult
+			var space = get_world_3d().direct_space_state
+			var q = PhysicsRayQueryParameters3D.create(origin, origin + dir * 95.0, 1 | 2)
+			q.exclude = [get_rid()]
+			var hit = space.intersect_ray(q)
+			var end_p = origin + dir * 95.0
+			if not hit.is_empty():
+				end_p = hit["position"]
+				var co = hit["collider"]
+				if (co is UTBot or co is UTPlayer) and co.team != team:
+					co.apply_damage(int(24 * mult), self, "Shock Rifle", dir * 5.5)
+					arena.spawn_sparks(end_p, Color(0.82, 0.35, 1.0), 8)
+			arena.spawn_beam(origin, end_p, Color(0.82, 0.35, 1.0), 0.045, 0.14)
 		else:
-			arena.spawn_projectile(origin + dir * 0.7, dir * 43.0, "plasma", self, int(14 * mult), 0.0, 0)
+			# Mid-range Link Gun plasma
+			fire_cd = randf_range(0.32, 0.55) * cd_mult
+			arena.spawn_projectile(origin, dir * 45.0, "plasma", self, int(13 * mult), 0.0, 0)
 
 	func apply_damage(dmg: int, attacker, weapon_name: String, impulse: Vector3) -> void:
 		if not alive:
@@ -2225,7 +2271,7 @@ class UTBot extends CharacterBody3D:
 			arena.spawn_sparks(global_position + Vector3(0, 1.0, 0), col, 12)
 
 # ==============================================================================
-# PROJECTILES (WITH ROCKET EXHAUST PLUME), SHOCK CORE & PARTICLE VFX
+# PROJECTILES, SHOCK CORE & PARTICLE VFX
 # ==============================================================================
 class UTProjectile extends Node3D:
 	var arena: Node3D = null
@@ -2808,7 +2854,6 @@ class UTHUD extends CanvasLayer:
 		var c = vs * 0.5
 		var font = ThemeDB.fallback_font
 
-		# High-contrast bottom status backing plate so HP/Armor never blend into the floor
 		var plate = Rect2(vs.x * 0.5 - 190, vs.y - 84, 380, 68)
 		root.draw_rect(plate, Color(0.03, 0.05, 0.09, 0.72), true)
 		root.draw_rect(plate, Color(0.25, 0.75, 0.95, 0.45), false, 1.5)
@@ -3044,7 +3089,7 @@ class UTMenuUI extends CanvasLayer:
 		backdrop.visible = true
 		title_lbl.text = "UNREAL ARENA: DECK 17"
 		title_lbl.add_theme_color_override("font_color", Color(0.25, 0.92, 1.0))
-		sub_lbl.text = "SELECT MODE & SETTINGS  •  TAP PLAY TO DEPLOY"
+		sub_lbl.text = "NEXT-GEN 3D ARENA SHOOTER  •  MSAA + ORBITAL VIEW"
 		play_btn.text = "PLAY MATCH"
 		resume_btn.visible = false
 		main_btn.visible = false
