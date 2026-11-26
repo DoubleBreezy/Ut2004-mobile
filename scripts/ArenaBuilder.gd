@@ -1,7 +1,7 @@
 extends Node3D
 
 # ==============================================================================
-# UT2004 MOBILE ARENA — DM-DECK17 & DM-TOKARA FOREST (MAP SELECT + LOW-G)
+# UT2004 MOBILE ARENA — DM-DECK17 & DM-TOKARA FOREST (BIOLUMINESCENT UPGRADE)
 # ==============================================================================
 
 const LAYER_WORLD: int = 1
@@ -26,11 +26,11 @@ const STATE_MATCH_OVER: int = 3
 var game_state: int = STATE_MENU
 
 # Match & Settings
-var cfg_map: int = MAP_DECK17
+var cfg_map: int = MAP_TOKARA
 var cfg_mode: int = MODE_TDM
 var cfg_bot_count: int = 6
 var cfg_difficulty: int = 1
-var cfg_high_gfx: bool = false
+var cfg_high_gfx: bool = true
 var cfg_sensitivity: float = 1.0
 var cfg_music_on: bool = true
 
@@ -55,10 +55,15 @@ var mat_dark_steel: StandardMaterial3D = null
 var mat_chrome: StandardMaterial3D = null
 var mat_crate: StandardMaterial3D = null
 var mat_glass: StandardMaterial3D = null
+
 var mat_forest_ground: StandardMaterial3D = null
 var mat_bark: StandardMaterial3D = null
 var mat_canopy: StandardMaterial3D = null
 var mat_bio_bridge: StandardMaterial3D = null
+var mat_flora_pink: StandardMaterial3D = null
+var mat_flora_purple: StandardMaterial3D = null
+var mat_flora_stem: StandardMaterial3D = null
+var mat_liquid_vat: ShaderMaterial = null
 
 var mat_glow_cyan: StandardMaterial3D = null
 var mat_glow_orange: StandardMaterial3D = null
@@ -143,7 +148,7 @@ func _apply_graphics_settings() -> void:
 	root_win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	root_win.content_scale_size = Vector2i(1280, 720)
 	root_win.msaa_3d = Viewport.MSAA_2X
-	root_win.scaling_3d_scale = 0.92 if cfg_high_gfx else 0.80
+	root_win.scaling_3d_scale = 0.90 if cfg_high_gfx else 0.78
 	Engine.max_fps = 60
 	if world_env != null and world_env.environment != null:
 		world_env.environment.glow_enabled = cfg_high_gfx
@@ -202,23 +207,28 @@ func _update_atmosphere_for_map() -> void:
 	var env = world_env.environment
 	var sky_mat = env.sky.sky_material as ProceduralSkyMaterial
 	if cfg_map == MAP_TOKARA:
+		# Deep lush Tokara jungle dusk with soft emerald-teal shafts & violet horizon haze
 		if sky_mat != null:
-			sky_mat.sky_top_color = Color(0.02, 0.08, 0.07)
-			sky_mat.sky_horizon_color = Color(0.09, 0.34, 0.26)
-			sky_mat.ground_bottom_color = Color(0.02, 0.06, 0.03)
-			sky_mat.ground_horizon_color = Color(0.06, 0.22, 0.16)
-		env.fog_light_color = Color(0.04, 0.16, 0.12)
-		env.fog_density = 0.0034
-		env.ambient_light_energy = 0.46
+			sky_mat.sky_top_color = Color(0.015, 0.055, 0.065)
+			sky_mat.sky_horizon_color = Color(0.14, 0.24, 0.28)
+			sky_mat.ground_bottom_color = Color(0.015, 0.04, 0.03)
+			sky_mat.ground_horizon_color = Color(0.06, 0.14, 0.13)
+			sky_mat.sky_energy_multiplier = 0.95
+		env.fog_light_color = Color(0.04, 0.11, 0.12)
+		env.fog_density = 0.0048
+		env.ambient_light_energy = 0.34
+		env.tonemap_exposure = 1.02
 	else:
 		if sky_mat != null:
 			sky_mat.sky_top_color = Color(0.015, 0.025, 0.06)
 			sky_mat.sky_horizon_color = Color(0.14, 0.22, 0.36)
 			sky_mat.ground_bottom_color = Color(0.02, 0.08, 0.05)
 			sky_mat.ground_horizon_color = Color(0.08, 0.16, 0.24)
+			sky_mat.sky_energy_multiplier = 1.05
 		env.fog_light_color = Color(0.04, 0.07, 0.11)
 		env.fog_density = 0.0042
 		env.ambient_light_energy = 0.42
+		env.tonemap_exposure = 1.05
 
 func start_new_match() -> void:
 	score_blue = 0
@@ -249,7 +259,7 @@ func start_new_match() -> void:
 	elif cfg_mode == MODE_INSTAGIB:
 		m_title = "INSTAGIB ARENA"
 	var map_tag = "TOKARA LOW-G" if cfg_map == MAP_TOKARA else "DECK17"
-	hud.show_banner("%s [%s] — FIGHT!" % [m_title, map_tag], Color(0.25, 0.92, 1.0))
+	hud.show_banner("%s [%s] — FIGHT!" % [m_title, map_tag], Color(0.35, 0.92, 0.78))
 	sfx.play_announcer("ann_play")
 
 func pause_match() -> void:
@@ -311,19 +321,19 @@ func _load_assets_and_materials() -> void:
 	mat_wall = _make_pbr_material("wall", Color(0.38, 0.44, 0.52), 0.48, 0.72, Vector3(0.09, 0.09, 0.09), false, false)
 
 	mat_dark_steel = StandardMaterial3D.new()
-	mat_dark_steel.albedo_color = Color(0.16, 0.20, 0.26)
-	mat_dark_steel.metallic = 0.80
-	mat_dark_steel.roughness = 0.34
+	mat_dark_steel.albedo_color = Color(0.15, 0.18, 0.23)
+	mat_dark_steel.metallic = 0.78
+	mat_dark_steel.roughness = 0.36
 
 	mat_chrome = StandardMaterial3D.new()
-	mat_chrome.albedo_color = Color(0.74, 0.80, 0.88)
-	mat_chrome.metallic = 0.90
-	mat_chrome.roughness = 0.22
+	mat_chrome.albedo_color = Color(0.72, 0.78, 0.86)
+	mat_chrome.metallic = 0.88
+	mat_chrome.roughness = 0.24
 
 	mat_crate = StandardMaterial3D.new()
-	mat_crate.albedo_color = Color(0.28, 0.34, 0.42)
-	mat_crate.metallic = 0.65
-	mat_crate.roughness = 0.38
+	mat_crate.albedo_color = Color(0.24, 0.30, 0.36)
+	mat_crate.metallic = 0.58
+	mat_crate.roughness = 0.44
 
 	mat_glass = StandardMaterial3D.new()
 	mat_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -331,26 +341,59 @@ func _load_assets_and_materials() -> void:
 	mat_glass.roughness = 0.10
 	mat_glass.metallic = 0.20
 
-	# Tokara Forest alien/ancient woodland materials
+	# Richer organic PBR textures for Tokara Forest (mossy soil + grooved bark + bio-catwalks)
 	mat_forest_ground = StandardMaterial3D.new()
-	mat_forest_ground.albedo_color = Color(0.14, 0.26, 0.18)
-	mat_forest_ground.roughness = 0.82
-	mat_forest_ground.metallic = 0.05
+	mat_forest_ground.albedo_texture = _make_moss_ground_albedo()
+	mat_forest_ground.normal_enabled = true
+	mat_forest_ground.normal_texture = _make_moss_ground_normal()
+	mat_forest_ground.normal_scale = 0.55
+	mat_forest_ground.roughness = 0.84
+	mat_forest_ground.metallic = 0.04
+	mat_forest_ground.uv1_triplanar = true
+	mat_forest_ground.uv1_world_triplanar = true
+	mat_forest_ground.uv1_scale = Vector3(0.08, 0.08, 0.08)
 
 	mat_bark = StandardMaterial3D.new()
-	mat_bark.albedo_color = Color(0.22, 0.16, 0.12)
-	mat_bark.roughness = 0.86
-	mat_bark.metallic = 0.04
+	mat_bark.albedo_texture = _make_bark_albedo()
+	mat_bark.normal_enabled = true
+	mat_bark.normal_texture = _make_bark_normal()
+	mat_bark.normal_scale = 0.65
+	mat_bark.roughness = 0.88
+	mat_bark.metallic = 0.02
+	mat_bark.uv1_triplanar = true
+	mat_bark.uv1_world_triplanar = true
+	mat_bark.uv1_scale = Vector3(0.18, 0.18, 0.18)
 
 	mat_canopy = StandardMaterial3D.new()
-	mat_canopy.albedo_color = Color(0.08, 0.34, 0.22)
-	mat_canopy.roughness = 0.72
+	mat_canopy.albedo_color = Color(0.07, 0.24, 0.17)
+	mat_canopy.roughness = 0.76
 	mat_canopy.metallic = 0.05
 
 	mat_bio_bridge = StandardMaterial3D.new()
-	mat_bio_bridge.albedo_color = Color(0.24, 0.38, 0.32)
-	mat_bio_bridge.roughness = 0.46
-	mat_bio_bridge.metallic = 0.35
+	mat_bio_bridge.albedo_color = Color(0.18, 0.26, 0.28)
+	mat_bio_bridge.roughness = 0.44
+	mat_bio_bridge.metallic = 0.52
+
+	mat_flora_stem = StandardMaterial3D.new()
+	mat_flora_stem.albedo_color = Color(0.12, 0.22, 0.24)
+	mat_flora_stem.roughness = 0.65
+
+	# Soft, pleasant pink & purple bioluminescent flora (no harsh neon glare)
+	mat_flora_pink = StandardMaterial3D.new()
+	mat_flora_pink.albedo_color = Color(0.86, 0.36, 0.66)
+	mat_flora_pink.roughness = 0.32
+	mat_flora_pink.emission_enabled = true
+	mat_flora_pink.emission = Color(0.78, 0.24, 0.56)
+	mat_flora_pink.emission_energy_multiplier = 1.35
+
+	mat_flora_purple = StandardMaterial3D.new()
+	mat_flora_purple.albedo_color = Color(0.56, 0.34, 0.88)
+	mat_flora_purple.roughness = 0.32
+	mat_flora_purple.emission_enabled = true
+	mat_flora_purple.emission = Color(0.48, 0.22, 0.82)
+	mat_flora_purple.emission_energy_multiplier = 1.40
+
+	mat_liquid_vat = _make_liquid_vat_shader()
 
 	mat_trim = StandardMaterial3D.new()
 	mat_trim.albedo_texture = _make_hazard_texture()
@@ -360,15 +403,86 @@ func _load_assets_and_materials() -> void:
 	mat_trim.uv1_world_triplanar = true
 	mat_trim.uv1_scale = Vector3(0.28, 0.28, 0.28)
 
-	mat_glow_cyan = _make_glow_material(Color(0.16, 0.92, 1.0), 2.8)
-	mat_glow_orange = _make_glow_material(Color(1.0, 0.58, 0.12), 2.6)
-	mat_glow_purple = _make_glow_material(Color(0.82, 0.28, 1.0), 3.1)
-	mat_glow_green = _make_glow_material(Color(0.18, 1.0, 0.38), 2.8)
-	mat_glow_red = _make_glow_material(Color(1.0, 0.22, 0.16), 2.9)
+	mat_glow_cyan = _make_glow_material(Color(0.20, 0.86, 0.92), 2.1)
+	mat_glow_orange = _make_glow_material(Color(0.95, 0.56, 0.16), 2.0)
+	mat_glow_purple = _make_glow_material(Color(0.72, 0.30, 0.92), 2.3)
+	mat_glow_green = _make_glow_material(Color(0.22, 0.90, 0.48), 2.1)
+	mat_glow_red = _make_glow_material(Color(0.95, 0.24, 0.18), 2.2)
 	mat_acid = _make_acid_shader_material()
 
+func _make_moss_ground_albedo() -> ImageTexture:
+	var size = 128
+	var img = Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	for y in range(size):
+		for x in range(size):
+			var wave = sin(float(x) * 0.14) * cos(float(y) * 0.14) * 0.04
+			var speckle = float(((x * 29 + y * 67) % 17) - 8) * 0.005
+			var patch = ((x / 16 + y / 16) % 2) * 0.022
+			var r = clamp(0.11 + wave + speckle + patch * 0.5, 0.04, 0.35)
+			var g = clamp(0.21 + wave * 1.4 + speckle + patch, 0.08, 0.48)
+			var b = clamp(0.14 + wave + speckle + patch * 0.7, 0.05, 0.38)
+			img.set_pixel(x, y, Color(r, g, b, 1.0))
+	return ImageTexture.create_from_image(img)
+
+func _make_moss_ground_normal() -> ImageTexture:
+	var size = 128
+	var img = Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	for y in range(size):
+		for x in range(size):
+			var nx = 0.5 + sin(float(x) * 0.28) * 0.08
+			var ny = 0.5 + cos(float(y) * 0.28) * 0.08
+			img.set_pixel(x, y, Color(clamp(nx, 0.2, 0.8), clamp(ny, 0.2, 0.8), 0.96, 1.0))
+	return ImageTexture.create_from_image(img)
+
+func _make_bark_albedo() -> ImageTexture:
+	var size = 128
+	var img = Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	for y in range(size):
+		for x in range(size):
+			var ridge = sin(float(x) * 0.55 + sin(float(y) * 0.08) * 2.0) * 0.045
+			var grain = float(((x * 43 + y * 19) % 15) - 7) * 0.004
+			var r = clamp(0.20 + ridge + grain, 0.06, 0.38)
+			var g = clamp(0.14 + ridge * 0.8 + grain, 0.04, 0.28)
+			var b = clamp(0.10 + ridge * 0.6 + grain, 0.03, 0.22)
+			img.set_pixel(x, y, Color(r, g, b, 1.0))
+	return ImageTexture.create_from_image(img)
+
+func _make_bark_normal() -> ImageTexture:
+	var size = 128
+	var img = Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	for y in range(size):
+		for x in range(size):
+			var nx = 0.5 + cos(float(x) * 0.55 + sin(float(y) * 0.08) * 2.0) * 0.18
+			var ny = 0.5 + sin(float(y) * 0.16) * 0.06
+			img.set_pixel(x, y, Color(clamp(nx, 0.15, 0.85), clamp(ny, 0.25, 0.75), 0.95, 1.0))
+	return ImageTexture.create_from_image(img)
+
+func _make_liquid_vat_shader() -> ShaderMaterial:
+	var sh = Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode cull_disabled;
+
+void fragment() {
+	vec2 uv = UV * 6.0;
+	float t = TIME * 1.35;
+	float ripple = sin(length(uv - vec2(3.0)) * 4.5 - t * 3.2) * 0.5 + 0.5;
+	float swirl = sin(uv.x * 2.4 + t) * cos(uv.y * 2.4 - t * 0.9) * 0.5 + 0.5;
+	float mix_f = clamp(ripple * 0.6 + swirl * 0.4, 0.0, 1.0);
+	vec3 deep_aqua = vec3(0.05, 0.36, 0.48);
+	vec3 lift_cyan = vec3(0.22, 0.84, 0.76);
+	vec3 col = mix(deep_aqua, lift_cyan, mix_f);
+	ALBEDO = col;
+	EMISSION = col * (1.1 + mix_f * 0.9);
+	ROUGHNESS = 0.16;
+	METALLIC = 0.12;
+}
+"""
+	var sm = ShaderMaterial.new()
+	sm.shader = sh
+	return sm
+
 func _build_map_thumbnails() -> void:
-	# 1. Deck17 mini-map thumbnail (Industrial steel + central green acid vat + high bridge)
 	var img1 = Image.create_empty(180, 100, false, Image.FORMAT_RGBA8)
 	for y in range(100):
 		for x in range(180):
@@ -376,31 +490,28 @@ func _build_map_thumbnails() -> void:
 			if x > 14 and x < 166 and y > 10 and y < 90:
 				c = Color(0.22, 0.27, 0.34, 1.0)
 			if x > 62 and x < 118 and y > 28 and y < 72:
-				c = Color(0.15, 0.85, 0.24, 1.0) # Central acid pool
+				c = Color(0.15, 0.85, 0.24, 1.0)
 			if x > 28 and x < 152 and abs(y - 50) < 5:
-				c = Color(0.76, 0.30, 1.0, 1.0)  # High bridge
+				c = Color(0.76, 0.30, 1.0, 1.0)
 			if abs(y - 16) < 3 or abs(y - 84) < 3:
 				c = Color(0.20, 0.75, 1.0, 1.0)
 			img1.set_pixel(x, y, c)
 	thumb_deck17 = ImageTexture.create_from_image(img1)
 
-	# 2. Tokara Forest mini-map thumbnail (Vast emerald forest + giant trunks + sky catwalks + low-G)
 	var img2 = Image.create_empty(180, 100, false, Image.FORMAT_RGBA8)
 	for y in range(100):
 		for x in range(180):
-			var c = Color(0.04, 0.14, 0.10, 1.0)
+			var c = Color(0.03, 0.10, 0.09, 1.0)
 			if x > 8 and x < 172 and y > 8 and y < 92:
-				c = Color(0.09, 0.24, 0.16, 1.0)
-			# Elevated canopy walkways
+				c = Color(0.08, 0.19, 0.14, 1.0)
 			if (x > 25 and x < 155 and abs(y - 34) < 3) or (x > 25 and x < 155 and abs(y - 68) < 3):
-				c = Color(0.22, 0.96, 0.52, 1.0)
-			# Ancient tree trunks & jump pads
+				c = Color(0.22, 0.78, 0.62, 1.0)
 			var trunks = [Vector2(45, 22), Vector2(135, 22), Vector2(45, 78), Vector2(135, 78), Vector2(90, 50)]
 			for t in trunks:
 				if Vector2(x, y).distance_to(t) < 7.0:
-					c = Color(0.32, 0.22, 0.14, 1.0)
-				elif Vector2(x, y).distance_to(t) < 9.2:
-					c = Color(0.20, 0.92, 1.0, 1.0)
+					c = Color(0.26, 0.18, 0.12, 1.0)
+				elif Vector2(x, y).distance_to(t) < 9.5:
+					c = Color(0.76, 0.36, 0.78, 1.0)
 			img2.set_pixel(x, y, c)
 	thumb_tokara = ImageTexture.create_from_image(img2)
 
@@ -440,7 +551,7 @@ func _make_glow_material(col: Color, energy: float) -> StandardMaterial3D:
 	m.emission_enabled = true
 	m.emission = col
 	m.emission_energy_multiplier = energy
-	m.roughness = 0.20
+	m.roughness = 0.24
 	return m
 
 func _make_acid_shader_material() -> ShaderMaterial:
@@ -474,7 +585,7 @@ func _make_hazard_texture() -> ImageTexture:
 	for y in range(64):
 		for x in range(64):
 			var band = int((x + y) / 16) % 2
-			var c = Color(0.95, 0.68, 0.10) if band == 0 else Color(0.08, 0.09, 0.11)
+			var c = Color(0.92, 0.66, 0.12) if band == 0 else Color(0.08, 0.09, 0.11)
 			img.set_pixel(x, y, c)
 	return ImageTexture.create_from_image(img)
 
@@ -532,47 +643,45 @@ func _setup_environment() -> void:
 
 	var sky = Sky.new()
 	var sky_mat = ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.015, 0.025, 0.06)
-	sky_mat.sky_horizon_color = Color(0.14, 0.22, 0.36)
-	sky_mat.ground_bottom_color = Color(0.02, 0.08, 0.05)
-	sky_mat.ground_horizon_color = Color(0.08, 0.16, 0.24)
-	sky_mat.sky_energy_multiplier = 1.05
+	sky_mat.sky_top_color = Color(0.015, 0.055, 0.065)
+	sky_mat.sky_horizon_color = Color(0.14, 0.24, 0.28)
+	sky_mat.ground_bottom_color = Color(0.015, 0.04, 0.03)
+	sky_mat.ground_horizon_color = Color(0.06, 0.14, 0.13)
+	sky_mat.sky_energy_multiplier = 0.95
 	sky.sky_material = sky_mat
 
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.42
+	env.ambient_light_energy = 0.34
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.06
+	env.tonemap_exposure = 1.02
 	env.glow_enabled = cfg_high_gfx
-	env.glow_intensity = 0.58
-	env.glow_bloom = 0.18
+	env.glow_intensity = 0.42
+	env.glow_bloom = 0.14
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.04, 0.07, 0.11)
-	env.fog_density = 0.0042
+	env.fog_light_color = Color(0.04, 0.11, 0.12)
+	env.fog_density = 0.0048
 
 	world_env.environment = env
 	add_child(world_env)
 
+	# Warm canopy shaft directional light
 	var sun_key = DirectionalLight3D.new()
-	sun_key.light_color = Color(0.96, 0.85, 0.72)
-	sun_key.light_energy = 0.76
-	sun_key.rotation_degrees = Vector3(-56, 36, 0)
+	sun_key.light_color = Color(0.95, 0.86, 0.72)
+	sun_key.light_energy = 0.72
+	sun_key.rotation_degrees = Vector3(-58, 32, 0)
 	sun_key.shadow_enabled = false
 	add_child(sun_key)
 
+	# Cool aqua/violet rim light for depth
 	var sun_rim = DirectionalLight3D.new()
-	sun_rim.light_color = Color(0.36, 0.74, 1.0)
-	sun_rim.light_energy = 0.38
-	sun_rim.rotation_degrees = Vector3(-26, -142, 0)
+	sun_rim.light_color = Color(0.45, 0.72, 0.88)
+	sun_rim.light_energy = 0.34
+	sun_rim.rotation_degrees = Vector3(-28, -142, 0)
 	sun_rim.shadow_enabled = false
 	add_child(sun_rim)
-
-	_add_point_light(Vector3(0, 1.2, 0), Color(0.25, 1.0, 0.22), 3.8, 24.0)
-	_add_point_light(Vector3(0, 6.8, -22), Color(0.18, 0.78, 1.0), 2.8, 26.0)
-	_add_point_light(Vector3(0, 6.8, 22), Color(1.0, 0.30, 0.22), 2.8, 26.0)
 
 func _add_point_light(pos: Vector3, col: Color, energy: float, rng: float) -> void:
 	var l = OmniLight3D.new()
@@ -699,7 +808,7 @@ func _add_cyl(pos: Vector3, r: float, h: float, mat: Material, rot_deg: Vector3 
 	cm.top_radius = r * 0.85
 	cm.bottom_radius = r
 	cm.height = h
-	cm.radial_segments = 12
+	cm.radial_segments = 14
 	mi.mesh = cm
 	mi.material_override = mat
 	root.add_child(mi)
@@ -734,6 +843,10 @@ func _add_wall_reactor(pos: Vector3, glow_mat: Material) -> void:
 		_add_box(pos + Vector3(0, y_ring, 0.35), Vector3(1.3, 0.24, 0.9), mat_chrome, Vector3.ZERO, false)
 
 func _build_deck17_arena() -> void:
+	_add_point_light(Vector3(0, 1.2, 0), Color(0.25, 1.0, 0.22), 3.6, 22.0)
+	_add_point_light(Vector3(0, 6.8, -22), Color(0.18, 0.78, 1.0), 2.6, 24.0)
+	_add_point_light(Vector3(0, 6.8, 22), Color(1.0, 0.30, 0.22), 2.6, 24.0)
+
 	_add_box(Vector3(0, -0.5, -18.5), Vector3(48, 1.0, 19.0), mat_floor)
 	_add_box(Vector3(0, -0.5, 18.5), Vector3(48, 1.0, 19.0), mat_floor)
 	_add_box(Vector3(-15.5, -0.5, 0), Vector3(17.0, 1.0, 18.0), mat_floor)
@@ -835,36 +948,133 @@ func _build_deck17_arena() -> void:
 	_add_jump_pad(Vector3(-13.5, 0.08, 14.5), Vector3(-19.0, 6.2, 16.0))
 
 func _add_tokara_tree(pos: Vector3, trunk_r: float, height: float, glow_mat: Material) -> void:
+	# Main bark trunk + root buttresses
 	_add_cyl(pos + Vector3(0, height * 0.5, 0), trunk_r, height, mat_bark, Vector3.ZERO, true)
-	# Glowing alien sap vein along trunk
-	_add_box(pos + Vector3(0, height * 0.45, trunk_r * 0.85), Vector3(trunk_r * 0.28, height * 0.72, 0.14), glow_mat, Vector3.ZERO, false)
-	# Layered canopy crown high above walkways
-	for layer_i in range(3):
-		var cy = height * (0.76 + float(layer_i) * 0.11)
-		var cr = trunk_r * (3.6 - float(layer_i) * 0.75)
-		_add_cyl(pos + Vector3(0, cy, 0), cr, 2.4, mat_canopy, Vector3(0, layer_i * 35.0, 0), false)
+	for b_ang in [0.0, 120.0, 240.0]:
+		var rad_a = deg_to_rad(b_ang)
+		var b_pos = pos + Vector3(cos(rad_a) * trunk_r * 0.75, 1.4, sin(rad_a) * trunk_r * 0.75)
+		_add_box(b_pos, Vector3(trunk_r * 0.55, 2.8, trunk_r * 0.45), mat_bark, Vector3(sin(rad_a) * 14.0, b_ang, -cos(rad_a) * 14.0), false)
+
+	# Subtle sap vein (toned down so it doesn't look neon-garish)
+	_add_box(pos + Vector3(0, height * 0.42, trunk_r * 0.86), Vector3(trunk_r * 0.16, height * 0.58, 0.10), glow_mat, Vector3.ZERO, false)
+
+	# Multi-tier organic canopy clusters
+	for layer_i in range(4):
+		var cy = height * (0.72 + float(layer_i) * 0.09)
+		var cr = trunk_r * (3.8 - float(layer_i) * 0.65)
+		_add_cyl(pos + Vector3(0, cy, 0), cr, 2.2, mat_canopy, Vector3(0, layer_i * 42.0, 0), false)
+
+func _add_bioluminescent_flora(pos: Vector3, is_pink: bool, scale_f: float = 1.0, add_light: bool = true) -> void:
+	var f_mat = mat_flora_pink if is_pink else mat_flora_purple
+	var cluster = Node3D.new()
+	cluster.position = pos
+	cluster.scale = Vector3.ONE * scale_f
+	map_root.add_child(cluster)
+
+	var offsets = [
+		[Vector3(0, 0.35, 0), 0.10, 0.70, 0.34],
+		[Vector3(0.32, 0.25, 0.18), 0.08, 0.50, 0.24],
+		[Vector3(-0.28, 0.22, -0.22), 0.08, 0.44, 0.22],
+		[Vector3(0.16, 0.18, -0.34), 0.07, 0.36, 0.19]
+	]
+	for item in offsets:
+		var ipos: Vector3 = item[0]
+		var sr: float = item[1]
+		var sh: float = item[2]
+		var br: float = item[3]
+
+		var stem = MeshInstance3D.new()
+		var cm = CylinderMesh.new()
+		cm.top_radius = sr * 0.75
+		cm.bottom_radius = sr
+		cm.height = sh
+		cm.radial_segments = 8
+		stem.mesh = cm
+		stem.material_override = mat_flora_stem
+		stem.position = Vector3(ipos.x, sh * 0.5, ipos.z)
+		cluster.add_child(stem)
+
+		var cap = MeshInstance3D.new()
+		var sm = SphereMesh.new()
+		sm.radius = br
+		sm.height = br * 1.15
+		sm.radial_segments = 12
+		sm.rings = 8
+		cap.mesh = sm
+		cap.material_override = f_mat
+		cap.position = Vector3(ipos.x, sh + br * 0.25, ipos.z)
+		cap.scale = Vector3(1.15, 0.72, 1.15)
+		cluster.add_child(cap)
+
+	if add_light:
+		var l_col = Color(0.88, 0.32, 0.64) if is_pink else Color(0.56, 0.28, 0.92)
+		_add_point_light(pos + Vector3(0, 1.2, 0), l_col, 1.45 * scale_f, 11.5 * scale_f)
+
+func _add_liquid_jump_vat(pos: Vector3, target_pos: Vector3) -> void:
+	# Raised basin with shimmering lifting fluid that launches players skyward
+	var vat = Node3D.new()
+	vat.position = pos
+	map_root.add_child(vat)
+
+	var rim = MeshInstance3D.new()
+	var tm = TorusMesh.new()
+	tm.inner_radius = 1.45
+	tm.outer_radius = 1.88
+	tm.rings = 18
+	tm.ring_segments = 10
+	rim.mesh = tm
+	rim.material_override = mat_bio_bridge
+	rim.position = Vector3(0, 0.16, 0)
+	vat.add_child(rim)
+
+	var glow_ring = MeshInstance3D.new()
+	var tm2 = TorusMesh.new()
+	tm2.inner_radius = 1.25
+	tm2.outer_radius = 1.46
+	tm2.rings = 18
+	tm2.ring_segments = 8
+	glow_ring.mesh = tm2
+	glow_ring.material_override = mat_glow_cyan
+	glow_ring.position = Vector3(0, 0.20, 0)
+	vat.add_child(glow_ring)
+
+	var fluid = MeshInstance3D.new()
+	var cm = CylinderMesh.new()
+	cm.top_radius = 1.42
+	cm.bottom_radius = 1.35
+	cm.height = 0.26
+	cm.radial_segments = 18
+	fluid.mesh = cm
+	fluid.material_override = mat_liquid_vat
+	fluid.position = Vector3(0, 0.12, 0)
+	vat.add_child(fluid)
+
+	# Upward-biased velocity so stepping into the liquid vat propels you high into the air
+	var vel = (target_pos - pos)
+	vel.y = 0.0
+	var horiz = vel.normalized() * 8.5
+	var launch_vel = Vector3(horiz.x, 18.2, horiz.z)
+	jump_pads.append({"pos": pos, "vel": launch_vel, "ring": glow_ring})
+	_add_point_light(pos + Vector3(0, 1.4, 0), Color(0.20, 0.84, 0.78), 2.3, 15.0)
 
 func _build_tokara_forest_arena() -> void:
-	# ~2.5x larger open forest clearing: X in [-56, 56], Z in [-56, 56]
+	# ~2.5x larger forest clearing: X in [-56, 56], Z in [-56, 56]
 	_add_box(Vector3(0, -0.5, 0), Vector3(114, 1.0, 114), mat_forest_ground, Vector3.ZERO, true)
-	# Outer boundary cliffs/rocks
 	_add_box(Vector3(0, 12.0, -57.5), Vector3(116, 25.0, 2.0), mat_bark, Vector3.ZERO, true)
 	_add_box(Vector3(0, 12.0, 57.5), Vector3(116, 25.0, 2.0), mat_bark, Vector3.ZERO, true)
 	_add_box(Vector3(-57.5, 12.0, 0), Vector3(2.0, 25.0, 116), mat_bark, Vector3.ZERO, true)
 	_add_box(Vector3(57.5, 12.0, 0), Vector3(2.0, 25.0, 116), mat_bark, Vector3.ZERO, true)
 
-	# Elevated organic/bio-tech forest catwalks (Y = 7.5 and Y = 14.0)
+	# Elevated bio-catwalks (Y = 7.5 and Y = 14.0)
 	_add_box(Vector3(0, 7.25, -24.0), Vector3(72.0, 0.5, 6.0), mat_bio_bridge, Vector3.ZERO, true)
 	_add_box(Vector3(0, 7.25, 24.0), Vector3(72.0, 0.5, 6.0), mat_bio_bridge, Vector3.ZERO, true)
 	_add_box(Vector3(-26.0, 7.25, 0), Vector3(6.0, 0.5, 54.0), mat_bio_bridge, Vector3.ZERO, true)
 	_add_box(Vector3(26.0, 7.25, 0), Vector3(6.0, 0.5, 54.0), mat_bio_bridge, Vector3.ZERO, true)
-	# High central sky-bridge
 	_add_box(Vector3(0, 13.8, 0), Vector3(54.0, 0.5, 5.5), mat_bio_bridge, Vector3.ZERO, true)
-	_add_box(Vector3(0, 14.08, 0), Vector3(52.0, 0.14, 0.35), mat_glow_green, Vector3.ZERO, false)
+	_add_box(Vector3(0, 14.08, 0), Vector3(52.0, 0.12, 0.30), mat_glow_green, Vector3.ZERO, false)
 
-	# Glowing bioluminescent edge strips on catwalks
-	_add_box(Vector3(0, 7.52, -21.1), Vector3(70.0, 0.12, 0.25), mat_glow_cyan, Vector3.ZERO, false)
-	_add_box(Vector3(0, 7.52, 21.1), Vector3(70.0, 0.12, 0.25), mat_glow_red, Vector3.ZERO, false)
+	_add_box(Vector3(0, 7.52, -21.1), Vector3(70.0, 0.10, 0.22), mat_glow_cyan, Vector3.ZERO, false)
+	_add_box(Vector3(0, 7.52, 21.1), Vector3(70.0, 0.10, 0.22), mat_glow_red, Vector3.ZERO, false)
 
 	# Giant Tokara trees framing the clearing & supporting walkways
 	var tree_specs = [
@@ -882,22 +1092,47 @@ func _build_tokara_forest_arena() -> void:
 	for ts in tree_specs:
 		_add_tokara_tree(ts[0], ts[1], ts[2], ts[3])
 
-	# Ancient ruins / cover boulders across the forest floor
+	# Pink & purple bioluminescent plants along clearings, trunks & catwalks
+	var flora_spots = [
+		[Vector3(-8.5, 0.0, -7.5), true, 1.25, true],
+		[Vector3(8.5, 0.0, -7.5), false, 1.30, true],
+		[Vector3(-8.5, 0.0, 7.5), false, 1.20, true],
+		[Vector3(8.5, 0.0, 7.5), true, 1.25, true],
+		[Vector3(-19.0, 0.0, -14.0), true, 1.45, true],
+		[Vector3(19.0, 0.0, -14.0), false, 1.45, true],
+		[Vector3(-19.0, 0.0, 14.0), false, 1.45, true],
+		[Vector3(19.0, 0.0, 14.0), true, 1.45, true],
+		[Vector3(-34.0, 0.0, -24.0), true, 1.35, false],
+		[Vector3(34.0, 0.0, -24.0), false, 1.35, false],
+		[Vector3(-34.0, 0.0, 24.0), false, 1.35, false],
+		[Vector3(34.0, 0.0, 24.0), true, 1.35, false],
+		[Vector3(-14.0, 7.5, -24.0), true, 0.95, false],
+		[Vector3(14.0, 7.5, -24.0), false, 0.95, false],
+		[Vector3(-14.0, 7.5, 24.0), false, 0.95, false],
+		[Vector3(14.0, 7.5, 24.0), true, 0.95, false],
+		[Vector3(-12.0, 14.05, 0.0), true, 0.90, false],
+		[Vector3(12.0, 14.05, 0.0), false, 0.90, false]
+	]
+	for fl in flora_spots:
+		_add_bioluminescent_flora(fl[0], fl[1], fl[2], fl[3])
+
+	# Ruins & cover blocks across the forest floor
 	_add_scifi_crate(Vector3(0, 1.3, 0), Vector3(6.5, 2.6, 6.5), mat_glow_green)
 	_add_scifi_crate(Vector3(-14, 1.1, -12), Vector3(4.5, 2.2, 2.2), mat_glow_cyan)
 	_add_scifi_crate(Vector3(14, 1.1, 12), Vector3(4.5, 2.2, 2.2), mat_glow_red)
 	_add_scifi_crate(Vector3(-34, 1.2, 8), Vector3(5.0, 2.4, 2.6), mat_glow_green)
 	_add_scifi_crate(Vector3(34, 1.2, -8), Vector3(5.0, 2.4, 2.6), mat_glow_green)
 
-	# Low-G Jump Pads launching players high into the forest canopy!
-	_add_jump_pad(Vector3(-14.0, 0.08, -16.0), Vector3(-24.0, 12.0, -24.0))
-	_add_jump_pad(Vector3(14.0, 0.08, 16.0), Vector3(24.0, 12.0, 24.0))
-	_add_jump_pad(Vector3(0.0, 7.55, -24.0), Vector3(0.0, 18.0, -10.0))
-	_add_jump_pad(Vector3(0.0, 7.55, 24.0), Vector3(0.0, 18.0, 10.0))
+	# Lifting liquid vats launching players high into the canopy & walkways
+	_add_liquid_jump_vat(Vector3(-13.0, 0.05, -16.0), Vector3(-22.0, 14.0, -22.0))
+	_add_liquid_jump_vat(Vector3(13.0, 0.05, 16.0), Vector3(22.0, 14.0, 22.0))
+	_add_liquid_jump_vat(Vector3(0.0, 7.52, -24.0), Vector3(0.0, 18.0, -8.0))
+	_add_liquid_jump_vat(Vector3(0.0, 7.52, 24.0), Vector3(0.0, 18.0, 8.0))
 
-	_add_point_light(Vector3(0, 6.0, 0), Color(0.22, 1.0, 0.55), 4.0, 42.0)
-	_add_point_light(Vector3(-28, 9.0, -24), Color(0.20, 0.85, 1.0), 3.4, 38.0)
-	_add_point_light(Vector3(28, 9.0, 24), Color(1.0, 0.35, 0.22), 3.4, 38.0)
+	# Balanced atmospheric lights for Tokara Forest
+	_add_point_light(Vector3(0, 5.5, 0), Color(0.24, 0.85, 0.65), 2.8, 38.0)
+	_add_point_light(Vector3(-26, 8.5, -24), Color(0.24, 0.78, 0.88), 2.4, 34.0)
+	_add_point_light(Vector3(26, 8.5, 24), Color(0.92, 0.36, 0.26), 2.4, 34.0)
 
 func _add_jump_pad(pos: Vector3, target_pos: Vector3) -> void:
 	var pad = Node3D.new()
@@ -921,7 +1156,7 @@ func _add_jump_pad(pos: Vector3, target_pos: Vector3) -> void:
 	tm.rings = 16
 	tm.ring_segments = 10
 	ring.mesh = tm
-	ring.material_override = mat_glow_green if cfg_map == MAP_TOKARA else mat_glow_cyan
+	ring.material_override = mat_glow_cyan
 	ring.position = Vector3(0, 0.14, 0)
 	pad.add_child(ring)
 
@@ -932,15 +1167,14 @@ func _add_jump_pad(pos: Vector3, target_pos: Vector3) -> void:
 	c2.height = 0.08
 	c2.radial_segments = 16
 	core.mesh = c2
-	core.material_override = mat_glow_green if cfg_map == MAP_TOKARA else mat_glow_cyan
+	core.material_override = mat_glow_cyan
 	core.position = Vector3(0, 0.12, 0)
 	pad.add_child(core)
 
 	var vel = (target_pos - pos)
 	vel.y = 0.0
-	var horiz = vel.normalized() * (11.5 if cfg_map == MAP_TOKARA else 9.5)
-	var up_spd = 14.5 if cfg_map == MAP_TOKARA else 15.8
-	jump_pads.append({"pos": pos, "vel": Vector3(horiz.x, up_spd, horiz.z), "ring": ring})
+	var horiz = vel.normalized() * 9.5
+	jump_pads.append({"pos": pos, "vel": Vector3(horiz.x, 15.8, horiz.z), "ring": ring})
 
 func _setup_deck17_spawns_and_pickups() -> void:
 	spawn_points_blue = [
@@ -1102,7 +1336,7 @@ func _process(delta: float) -> void:
 	for jp in jump_pads:
 		var r: Node3D = jp["ring"]
 		r.rotation.y += delta * 2.4
-		r.position.y = 0.15 + sin(ticks * 1.5) * 0.05
+		r.position.y = 0.16 + sin(ticks * 1.5) * 0.05
 
 	for p in pickups:
 		var item: Node3D = p["node"]
@@ -1196,7 +1430,7 @@ func _check_acid_damage() -> void:
 
 func check_jump_pads(actor: CharacterBody3D) -> bool:
 	for jp in jump_pads:
-		if actor.global_position.distance_to(jp["pos"]) < 1.9 and actor.velocity.y < 12.0:
+		if actor.global_position.distance_to(jp["pos"]) < 1.95 and actor.velocity.y < 14.0:
 			actor.velocity = jp["vel"]
 			if actor == player:
 				sfx.play_sfx("jump_pad")
@@ -1302,7 +1536,7 @@ func spawn_shock_core(pos: Vector3, vel: Vector3, attacker) -> void:
 	shock_cores.append(sc)
 
 # ==============================================================================
-# PUNCHY MULTI-LAYER AUDIO (ROCKET SPINUP + BLAST + BOOM + STEPS + VOICE)
+# PUNCHY MULTI-LAYER AUDIO
 # ==============================================================================
 class UTSoundBank extends Node:
 	var bank: Dictionary = {}
@@ -1356,7 +1590,6 @@ class UTSoundBank extends Node:
 		bank["step"] = _build_step_sfx()
 
 	func _build_rocket_sfx() -> AudioStreamWAV:
-		# Mechanical barrel spin-up (first 0.11s) -> heavy whoosh + punchy launch blast
 		var rate = 22050
 		var dur = 0.42
 		var n = int(dur * rate)
@@ -1573,7 +1806,7 @@ class UTSoundBank extends Node:
 		p.play()
 
 # ==============================================================================
-# PLAYER CONTROLLER (Map-Aware Gravity + Air Control + Footsteps)
+# PLAYER CONTROLLER
 # ==============================================================================
 class UTPlayer extends CharacterBody3D:
 	var arena: Node3D = null
@@ -2170,7 +2403,7 @@ class UTPlayer extends CharacterBody3D:
 			arena.sfx.play_announcer("ann_unstoppable")
 
 # ==============================================================================
-# SKELETAL 3D SOLDIER BOT (Map-Aware Roaming + Low-G Jumps + Death Fall)
+# SKELETAL 3D SOLDIER BOT
 # ==============================================================================
 class UTBot extends CharacterBody3D:
 	var arena: Node3D = null
@@ -2430,8 +2663,8 @@ class UTBot extends CharacterBody3D:
 				Vector3(34.0, 0.2, -32.0),
 				Vector3(-34.0, 0.2, 32.0),
 				Vector3(34.0, 0.2, 32.0),
-				Vector3(-14.0, 0.2, -16.0),
-				Vector3(14.0, 0.2, 16.0),
+				Vector3(-13.0, 0.2, -16.0),
+				Vector3(13.0, 0.2, 16.0),
 				Vector3(0.0, 7.8, -24.0),
 				Vector3(0.0, 7.8, 24.0),
 				Vector3(-26.0, 7.8, 0.0),
@@ -3347,7 +3580,7 @@ class UTHUD extends CanvasLayer:
 		root.draw_string(font, tpos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, Color(0.96, 0.98, 1.0))
 
 # ==============================================================================
-# MENU UI WITH MAP SELECT THUMBNAILS (DECK17 + TOKARA FOREST LOW-G)
+# MENU UI WITH MAP SELECT THUMBNAILS (TOKARA FOREST + DECK17)
 # ==============================================================================
 class UTMenuUI extends CanvasLayer:
 	var arena: Node3D = null
@@ -3377,7 +3610,7 @@ class UTMenuUI extends CanvasLayer:
 		layer = 10
 		backdrop = ColorRect.new()
 		backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-		backdrop.color = Color(0.02, 0.04, 0.08, 0.54)
+		backdrop.color = Color(0.02, 0.04, 0.08, 0.52)
 		add_child(backdrop)
 
 		var center = CenterContainer.new()
@@ -3416,20 +3649,19 @@ class UTMenuUI extends CanvasLayer:
 		sub_lbl.add_theme_color_override("font_color", Color(0.75, 0.84, 0.95))
 		vbox.add_child(sub_lbl)
 
-		# Map selector row with visual thumbnails
 		var map_row = HBoxContainer.new()
 		map_row.add_theme_constant_override("separation", 12)
 		vbox.add_child(map_row)
-
-		var c0 = _build_map_card("DM-DECK17  [1.0G]", arena.thumb_deck17, 0)
-		map_card_0 = c0["card"]
-		map_btn_0 = c0["btn"]
-		map_row.add_child(map_card_0)
 
 		var c1 = _build_map_card("DM-TOKARA  [LOW-G]", arena.thumb_tokara, 1)
 		map_card_1 = c1["card"]
 		map_btn_1 = c1["btn"]
 		map_row.add_child(map_card_1)
+
+		var c0 = _build_map_card("DM-DECK17  [1.0G]", arena.thumb_deck17, 0)
+		map_card_0 = c0["card"]
+		map_btn_0 = c0["btn"]
+		map_row.add_child(map_card_0)
 
 		var row1 = HBoxContainer.new()
 		row1.add_theme_constant_override("separation", 10)
@@ -3443,7 +3675,7 @@ class UTMenuUI extends CanvasLayer:
 		row2.add_theme_constant_override("separation", 10)
 		vbox.add_child(row2)
 		diff_btn = _make_btn("AI: SKILLED", Color(0.85, 0.55, 0.16), _cycle_diff)
-		gfx_btn = _make_btn("GFX: 60 FPS MSAA", Color(0.68, 0.30, 0.92), _toggle_gfx)
+		gfx_btn = _make_btn("GFX: ULTRA + BLOOM", Color(0.68, 0.30, 0.92), _toggle_gfx)
 		row2.add_child(diff_btn)
 		row2.add_child(gfx_btn)
 
@@ -3554,8 +3786,8 @@ class UTMenuUI extends CanvasLayer:
 	func _refresh_labels() -> void:
 		var m_names = ["TEAM DM", "FREE FOR ALL", "INSTAGIB"]
 		var d_names = ["NOVICE", "SKILLED", "GODLIKE"]
-		_style_map_card(map_card_0, map_btn_0, arena.cfg_map == 0, Color(0.22, 0.85, 1.0))
 		_style_map_card(map_card_1, map_btn_1, arena.cfg_map == 1, Color(0.22, 1.0, 0.52))
+		_style_map_card(map_card_0, map_btn_0, arena.cfg_map == 0, Color(0.22, 0.85, 1.0))
 		mode_btn.text = "MODE: " + m_names[arena.cfg_mode]
 		bots_btn.text = "BOTS: %d" % arena.cfg_bot_count
 		diff_btn.text = "AI: " + d_names[arena.cfg_difficulty]
@@ -3598,7 +3830,7 @@ class UTMenuUI extends CanvasLayer:
 		backdrop.visible = true
 		title_lbl.text = "UNREAL TOURNAMENT: MOBILE ARENA"
 		title_lbl.add_theme_color_override("font_color", Color(0.25, 0.92, 1.0))
-		sub_lbl.text = "CHOOSE MAP WITH THUMBNAILS  •  DECK17 (1.0G) OR TOKARA FOREST (LOW-G)"
+		sub_lbl.text = "CHOOSE MAP WITH THUMBNAILS  •  TOKARA FOREST (LOW-G) OR DECK17 (1.0G)"
 		play_btn.text = "PLAY MATCH"
 		resume_btn.visible = false
 		main_btn.visible = false
