@@ -1,4 +1,4 @@
-Name: Build Android APK (Godot 4.3)
+name: Build Android APK (Godot 4.3)
 on: [push, workflow_dispatch]
 jobs:
   build-android:
