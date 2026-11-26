@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Android APK (Godot 4.3)
 on: [push, workflow_dispatch]
 jobs:
   build-android:
@@ -6,31 +6,173 @@ jobs:
     container: barichello/godot-ci:4.3
     steps:
       - uses: actions/checkout@v4
-      - run: |
+      - name: Download 3D Soldier & PBR Textures
+        run: |
           mkdir -p assets/models assets/textures assets/audio /tmp/d
-          (apt-get update -qq && apt-get install -y -qq unzip espeak-ng) || true
-          curl -fsSL "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb" -o assets/models/soldier.glb || true
+          (apt-get update -qq && apt-get install -y -qq python3 unzip espeak-ng) || true
+
+          for url in \
+            "https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Soldier.glb" \
+            "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb" \
+            "https://threejs.org/examples/models/gltf/Soldier.glb"; do
+            if curl -fsSL -L --retry 3 "$url" -o assets/models/soldier.glb && [ -s assets/models/soldier.glb ]; then
+              echo "Downloaded Soldier.glb from $url"
+              break
+            fi
+          done
+
           for p in "DiamondPlate008C floor" "Metal049A wall"; do
             set -- $p
-            curl -fsSL -A "Mozilla/5.0" "https://ambientcg.com/get?file=${1}_1K-JPG.zip" -o /tmp/d/$1.zip && unzip -oq /tmp/d/$1.zip -d /tmp/d/$1 || true
+            curl -fsSL -L -A "Mozilla/5.0" "https://ambientcg.com/get?file=${1}_1K-JPG.zip" -o /tmp/d/$1.zip && unzip -oq /tmp/d/$1.zip -d /tmp/d/$1 || true
             for m in Color:color NormalGL:normal Roughness:roughness Metalness:metalness; do
               cp /tmp/d/$1/*_${m%:*}.jpg assets/textures/${2}_${m#*:}.jpg 2>/dev/null || true
             done
           done
-          for l in "play|Play" "firstblood|First Blood" "double|Double Kill" "multi|Multi Kill" "monster|Monster Kill" "spree|Killing Spree" "unstoppable|Unstoppable" "combo|Shock Combo" "udamage|Double Damage" "victory|You win"; do
-            espeak-ng -v en-us+m3 -p 18 -s 125 -w "assets/audio/ann_${l%|*}.wav" "${l#*|}" || true
-          done
-      - run: |
+          ls -lh assets/models assets/textures
+
+      - name: Generate Cyberpunk Audio & Announcer
+        run: |
+          cat << 'EOF' > /tmp/gen_audio.py
+          import math, os, random, shutil, struct, subprocess, wave
+
+          OUT = "assets/audio"
+          os.makedirs(OUT, exist_ok=True)
+          SR = 22050
+
+          def save_wav(path, buf):
+              pk = max(0.001, max(abs(x) for x in buf))
+              sc = 0.90 / pk
+              raw = bytearray(len(buf) * 2)
+              for i, x in enumerate(buf):
+                  v = max(-32767, min(32767, int(math.tanh(x * sc * 1.3) * 31000)))
+                  struct.pack_into("<h", raw, i * 2, v)
+              with wave.open(path, "wb") as wf:
+                  wf.setnchannels(1)
+                  wf.setsampwidth(2)
+                  wf.setframerate(SR)
+                  wf.writeframes(raw)
+
+          # 1. Industrial Cyberpunk Techno Loop (132 BPM)
+          step = 60.0 / 132.0 / 4.0
+          n_bgm = int(64 * step * SR)
+          bgm = [0.0] * n_bgm
+          rng = random.Random(2004)
+          bass = [73.4, 73.4, 87.3, 73.4, 65.4, 65.4, 82.4, 98.0]
+          arp = [293.7, 349.2, 440.0, 349.2, 523.3, 440.0, 349.2, 329.6]
+
+          for s in range(64):
+              t0 = int(s * step * SR)
+              slen = int(step * SR)
+              bar, ib = s // 16, s % 16
+              if ib in (0, 4, 8, 12) or (bar % 2 == 1 and ib == 14):
+                  ph = 0.0
+                  for i in range(min(int(0.17 * SR), n_bgm - t0)):
+                      u = i / (0.17 * SR)
+                      ph += 2.0 * math.pi * (145.0 * ((1.0 - u) ** 2.5) + 38.0) / SR
+                      bgm[t0 + i] += math.sin(ph) * ((1.0 - u) ** 1.4) * 0.65
+              if ib in (4, 12):
+                  for i in range(min(int(0.14 * SR), n_bgm - t0)):
+                      u = i / (0.14 * SR)
+                      bgm[t0 + i] += (math.sin(2.0 * math.pi * 190.0 * i / SR) * 0.4 + rng.uniform(-1, 1) * 0.6) * ((1.0 - u) ** 2.2) * 0.4
+              if ib % 2 == 1:
+                  for i in range(min(int(0.04 * SR), n_bgm - t0)):
+                      u = i / (0.04 * SR)
+                      bgm[t0 + i] += rng.uniform(-1, 1) * ((1.0 - u) ** 3.0) * 0.14
+              bf = bass[(s // 2) % 8] * (1.122 if bar == 3 and ib >= 12 else 1.0)
+              for i in range(min(slen, n_bgm - t0)):
+                  u, t = i / float(slen), (t0 + i) / float(SR)
+                  saw = 2.0 * ((t * bf) % 1.0) - 1.0
+                  bgm[t0 + i] += (saw * 0.24 + math.sin(2.0 * math.pi * bf * t) * 0.26) * (1.0 - u * 0.6) * 0.48
+              if s % 2 == 0:
+                  af = arp[(s // 2 + bar) % 8]
+                  for i in range(min(int(step * 1.6 * SR), n_bgm - t0)):
+                      u, t = i / (step * 1.6 * SR), (t0 + i) / float(SR)
+                      env = math.sin(min(1.0, u * 10.0) * 1.57) * ((1.0 - u) ** 1.4)
+                      bgm[t0 + i] += math.sin(2.0 * math.pi * af * t) * env * 0.15
+          save_wav(f"{OUT}/bgm_arena.wav", bgm)
+
+          # 2. Punchy Multi-Layer Weapon & Impact SFX
+          def gen_sfx(dur, f0, f1, sub_f, nz_mix, echo_ms=75):
+              n = int(dur * SR)
+              b = [0.0] * (n + int(SR * 0.25))
+              ph, sph = 0.0, 0.0
+              for i in range(n):
+                  u = i / float(n)
+                  ph += 2.0 * math.pi * (f0 * ((1.0 - u) ** 1.8) + f1) / SR
+                  sph += 2.0 * math.pi * (sub_f * (1.0 - u * 0.5)) / SR
+                  env = (1.0 - u) ** 1.5
+                  b[i] = (math.sin(ph) * (1.0 - nz_mix) + rng.uniform(-1, 1) * nz_mix + math.sin(sph) * 0.55) * env
+              d = int(SR * echo_ms / 1000.0)
+              for i in range(d, len(b)):
+                  b[i] += b[i - d] * 0.32
+              return b
+
+          save_wav(f"{OUT}/sfx_shock.wav", gen_sfx(0.28, 1350, 140, 95, 0.25, 85))
+          save_wav(f"{OUT}/sfx_combo.wav", gen_sfx(0.65, 520, 35, 55, 0.68, 120))
+          save_wav(f"{OUT}/sfx_flak.wav", gen_sfx(0.32, 340, 48, 75, 0.88, 90))
+          save_wav(f"{OUT}/sfx_rocket.wav", gen_sfx(0.36, 260, 45, 68, 0.76, 95))
+          save_wav(f"{OUT}/sfx_link.wav", gen_sfx(0.14, 880, 360, 120, 0.18, 50))
+          save_wav(f"{OUT}/sfx_boom.wav", gen_sfx(0.55, 190, 28, 48, 0.94, 130))
+
+          # 3. Deep Arena Announcer
+          if shutil.which("espeak-ng"):
+              lines = {
+                  "ann_play": "Play!",
+                  "ann_firstblood": "First Blood!",
+                  "ann_double": "Double Kill!",
+                  "ann_multi": "Multi Kill!",
+                  "ann_monster": "Monster Kill!",
+                  "ann_spree": "Killing Spree!",
+                  "ann_unstoppable": "Unstoppable!",
+                  "ann_combo": "Shock Combo!",
+                  "ann_udamage": "Double Damage!",
+                  "ann_victory": "You have won the match!"
+              }
+              for k, txt in lines.items():
+                  rp = f"/tmp/{k}.wav"
+                  subprocess.run(["espeak-ng", "-v", "en-us+m3", "-p", "20", "-s", "126", "-w", rp, txt], check=False)
+                  if os.path.exists(rp):
+                      with wave.open(rp, "rb") as rf:
+                          rsr, raw = rf.getframerate(), rf.readframes(rf.getnframes())
+                      smp = list(struct.unpack(f"<{len(raw)//2}h", raw))
+                      nl = int(len(smp) / 0.78)
+                      out = [0.0] * (nl + int(rsr * 0.4))
+                      for i in range(nl):
+                          src = i * 0.78
+                          i0 = int(src)
+                          fr = src - i0
+                          s0 = smp[i0] if i0 < len(smp) else 0
+                          s1 = smp[i0 + 1] if i0 + 1 < len(smp) else s0
+                          out[i] = (s0 * (1.0 - fr) + s1 * fr) / 32768.0
+                      d1, d2 = int(rsr * 0.09), int(rsr * 0.19)
+                      for i in range(d1, len(out)):
+                          out[i] += out[i - d1] * 0.35 + (out[i - d2] * 0.20 if i >= d2 else 0.0)
+                      pk = max(0.001, max(abs(x) for x in out))
+                      ob = bytearray(len(out) * 2)
+                      for i, x in enumerate(out):
+                          struct.pack_into("<h", ob, i * 2, max(-32767, min(32767, int(math.tanh(x / pk * 1.25) * 31000))))
+                      with wave.open(f"{OUT}/{k}.wav", "wb") as wf:
+                          wf.setnchannels(1)
+                          wf.setsampwidth(2)
+                          wf.setframerate(rsr)
+                          wf.writeframes(ob)
+          EOF
+          python3 /tmp/gen_audio.py
+          ls -lh assets/audio
+
+      - name: Setup Keystore & Export APK
+        run: |
           mkdir -p ~/.local/share/godot ~/.config/godot build/android
           cp -rn /root/.local/share/godot/export_templates ~/.local/share/godot/ 2>/dev/null || true
           cp -rn /root/.config/godot/* ~/.config/godot/ 2>/dev/null || true
-          [ -f /root/debug.keystore ] || keytool -genkeypair -keystore /root/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 9999 -dname "CN=Android,O=Android,C=US"
+          [ -f /root/debug.keystore ] || keytool -genkeypair -keystore /root/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 9999 -dname "CN=Android Debug,O=Android,C=US"
           S="$HOME/.config/godot/editor_settings-4.3.tres"
           [ -f "$S" ] || godot --headless --editor --quit || true
           sed -i '/export\/android\/debug_keystore/d;/export\/android\/android_sdk_path/d' "$S" 2>/dev/null || true
           printf '\nexport/android/android_sdk_path = "/usr/lib/android-sdk"\nexport/android/debug_keystore = "/root/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' >> "$S"
           godot --headless --import || true
           godot --headless --verbose --export-debug "Android" build/android/ut2004-mobile.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: ut2004-mobile-apk
